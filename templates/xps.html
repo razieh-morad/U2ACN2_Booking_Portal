@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ lab.title }} | Booking</title>
+  <title>{{ lab.title }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
@@ -11,16 +11,17 @@
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab.title }}</h1>
-      <p class="sub">{{ lab.brand }} · Instrument: {{ lab.instrument }}</p>
+      <p class="sub">{{ lab.brand }}</p>
       <p class="sub">
         Administrators:
         {% for a in lab.administrators %}
           <span class="pill">{{ a.name }} ({{ a.contact }})</span>
         {% endfor %}
       </p>
+
       <nav class="tabs">
         <a class="tab active" href="{{ url_for('xps') }}">Booking</a>
-        <a class="tab" href="{{ url_for('xps_availability') }}">Availability (next 2 weeks)</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug='xps') }}">Availability</a>
       </nav>
     </div>
   </header>
@@ -113,7 +114,7 @@
 
       <div class="actions">
         <button type="submit">Submit booking</button>
-        <a class="secondary" href="{{ url_for('admin_bookings', lab_slug='xps') }}">View bookings</a>
+        <a class="secondary" href="{{ url_for('lab_availability', lab_slug='xps') }}">Check availability</a>
       </div>
     </form>
   </main>

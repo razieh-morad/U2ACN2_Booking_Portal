@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ lab.title }} | Booking</title>
+  <title>{{ lab.title }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
@@ -11,16 +11,17 @@
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab.title }}</h1>
-      <p class="sub">{{ lab.brand }} · Furnace type: {{ lab.furnace_type }}</p>
+      <p class="sub">{{ lab.brand }}</p>
       <p class="sub">
         Administrators:
         {% for a in lab.administrators %}
           <span class="pill">{{ a.name }} ({{ a.contact }})</span>
         {% endfor %}
       </p>
+
       <nav class="tabs">
         <a class="tab active" href="{{ url_for('furnace') }}">Booking</a>
-        <a class="tab" href="{{ url_for('furnace_availability') }}">Availability (next 2 weeks)</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Availability</a>
       </nav>
     </div>
   </header>
@@ -117,25 +118,11 @@
         <textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea>
       </label>
 
-      <div class="notes">
-        <ul>
-          <li>Ensure safety protocols and PPE are followed at all times.</li>
-          <li>Record actual furnace setpoints and observed values in your lab notebook.</li>
-        </ul>
-        <div class="nb">
-          NB: For gas flow and connection, please contact the administrators before starting any new experiment.
-        </div>
-      </div>
-
       <div class="actions">
         <button type="submit">Submit booking</button>
-        <a class="secondary" href="{{ url_for('admin_bookings', lab_slug='furnace') }}">View bookings</a>
+        <a class="secondary" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Check availability</a>
       </div>
     </form>
   </main>
-
-  <footer class="footer">
-    <div class="container">Prototype. Add login, approval workflow, and email notifications before rollout.</div>
-  </footer>
 </body>
 </html>

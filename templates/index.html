@@ -35,13 +35,9 @@
     </div>
 
     <div class="hint">
-      Admin (prototype): <a href="{{ url_for('admin_bookings', lab_slug='furnace') }}">Furnace bookings</a> ·
-      <a href="{{ url_for('admin_bookings', lab_slug='xps') }}">XPS bookings</a>
+      Admin: <a href="{{ url_for('admin_login', next=url_for('admin_bookings', lab_slug='furnace')) }}">Login</a> ·
+      <a href="{{ url_for('admin_logout') }}">Logout</a>
     </div>
   </main>
-
-  <footer class="footer">
-    <div class="container">Prototype. Add authentication before public use.</div>
-  </footer>
 </body>
 </html>

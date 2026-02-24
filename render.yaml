@@ -12,3 +12,7 @@ services:
         sync: false
       - key: APP_TZ
         value: Africa/Johannesburg
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
