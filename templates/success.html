@@ -1,24 +1,38 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Booking confirmed</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head><body>
-<header class="topbar"><div class="container">
-<a class="back" href="{{ url_for('index') }}">← Labs</a>
-<h1>Booking confirmed</h1><p class="sub">Reference ID: {{ b.id }}</p>
-</div></header>
-<main class="container">
-<div class="card">
-  <h2>Details</h2>
-  <div class="kv">
-    <div><span>Lab</span><strong>{{ b.lab_slug }}</strong></div>
-    <div><span>Date</span><strong>{{ b.booking_date }}</strong></div>
-    <div><span>Time</span><strong>{{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</strong></div>
-    <div><span>Name</span><strong>{{ b.user_name }}</strong></div>
-    <div><span>Email</span><strong>{{ b.user_email }}</strong></div>
-  </div>
-  <div class="actions"><a href="{{ url_for('index') }}">Back to labs</a></div>
-</div>
-</main></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Booking confirmed</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>Booking confirmed</h1>
+      <p class="sub">Reference ID: {{ b.id }}</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>Details</h2>
+      <div class="kv">
+        <div><span>Lab</span><strong>{{ b.lab_slug }}</strong></div>
+        <div><span>Date</span><strong>{{ b.booking_date }}</strong></div>
+        <div><span>Time</span><strong>{{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</strong></div>
+        <div><span>Name</span><strong>{{ b.user_name }}</strong></div>
+        <div><span>Email</span><strong>{{ b.user_email }}</strong></div>
+        {% if b.booking_group_id %}
+          <div><span>Group</span><strong>{{ b.booking_group_id }}</strong></div>
+        {% endif %}
+      </div>
+      <p class="hint">If you selected multiple slots, each slot is stored separately (same Group ID).</p>
+      <div class="actions">
+        <a class="secondary" href="{{ url_for('index') }}">Back to labs</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

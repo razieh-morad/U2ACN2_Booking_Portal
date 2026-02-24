@@ -19,24 +19,9 @@ from flask import (
 
 # ---------------- Config ----------------
 TZ = ZoneInfo(os.environ.get("APP_TZ", "Africa/Johannesburg"))
-
 WORKDAY_START = time(8, 0)
 WORKDAY_END = time(16, 0)  # boundary (last slot ends at 16:00)
 SLOT_MINUTES = int(os.environ.get("SLOT_MINUTES", "60"))
-
-# Admin login uses an email as username
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
-
-# SMTP settings (requested: same email+password as admin unless overridden)
-SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "y")
-
-SMTP_USER = os.environ.get("SMTP_USER", "").strip() or ADMIN_EMAIL
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip() or ADMIN_PASSWORD
-SMTP_FROM = os.environ.get("SMTP_FROM", "").strip() or ADMIN_EMAIL
-SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Booking Portal")
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = DATABASE_URL.lower().startswith("postgres")
@@ -60,7 +45,41 @@ LABS = {
     "xps": {"title": "XPS (X-ray Photoelectron Spectroscopy)", "subtitle": "Surface chemical analysis"},
 }
 
-# ---- schema (auto-migration)
+# Per-lab admins (email username + password)
+ADMIN = {
+    "furnace": {
+        "email": os.environ.get("ADMIN_FURNACE_EMAIL", "").strip(),
+        "password": os.environ.get("ADMIN_FURNACE_PASSWORD", "").strip(),
+    },
+    "xps": {
+        "email": os.environ.get("ADMIN_XPS_EMAIL", "").strip(),
+        "password": os.environ.get("ADMIN_XPS_PASSWORD", "").strip(),
+    },
+}
+
+# SMTP global host settings
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "y")
+SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Booking Portal")
+
+
+def _smtp_for_lab(lab_slug: str) -> Dict[str, Any]:
+    """
+    Defaults:
+      user/pass/from = that lab's admin email/password
+    Optional overrides:
+      SMTP_FURNACE_USER / SMTP_FURNACE_PASSWORD / SMTP_FURNACE_FROM
+      SMTP_XPS_USER / SMTP_XPS_PASSWORD / SMTP_XPS_FROM
+    """
+    lab = lab_slug.upper()
+    user = os.environ.get(f"SMTP_{lab}_USER", "").strip() or ADMIN[lab_slug]["email"]
+    pw = os.environ.get(f"SMTP_{lab}_PASSWORD", "").strip() or ADMIN[lab_slug]["password"]
+    from_addr = os.environ.get(f"SMTP_{lab}_FROM", "").strip() or user
+    return {"host": SMTP_HOST, "port": SMTP_PORT, "tls": SMTP_USE_TLS, "user": user, "password": pw, "from": from_addr}
+
+
+# ---- schema (auto-migration) ----
 PG_COLUMNS = {
     "lab_slug": "TEXT NOT NULL",
     "booking_group_id": "TEXT",
@@ -149,16 +168,13 @@ def _init_pg_pool():
     if _pg_pool is None:
         _pg_pool = ThreadedConnectionPool(minconn=1, maxconn=5, dsn=DATABASE_URL)
 
-
 def _pg_conn():
     assert _pg_pool is not None
     return _pg_pool.getconn()
 
-
 def _pg_putconn(conn):
     assert _pg_pool is not None
     _pg_pool.putconn(conn)
-
 
 def _migrate_postgres(cur):
     cur.execute("CREATE TABLE IF NOT EXISTS bookings (id SERIAL PRIMARY KEY);")
@@ -166,11 +182,9 @@ def _migrate_postgres(cur):
         cur.execute(f'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "{col}" {ddl};')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
 
-
 def _sqlite_existing_columns(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("PRAGMA table_info(bookings);").fetchall()
     return {r[1] for r in rows}
-
 
 def _migrate_sqlite(conn: sqlite3.Connection):
     conn.execute("CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT);")
@@ -179,7 +193,6 @@ def _migrate_sqlite(conn: sqlite3.Connection):
         if col not in existing:
             conn.execute(f"ALTER TABLE bookings ADD COLUMN {col} {ddl};")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
-
 
 def init_db():
     global _db_initialized
@@ -209,7 +222,6 @@ def parse_date(value: str) -> Optional[date]:
     except Exception:
         return None
 
-
 def parse_time(value: str) -> Optional[time]:
     try:
         return datetime.strptime(value, "%H:%M").time()
@@ -219,22 +231,39 @@ def parse_time(value: str) -> Optional[time]:
         except Exception:
             return None
 
-
 def overlaps(a_start: time, a_end: time, b_start: time, b_end: time) -> bool:
     return (a_start < b_end) and (a_end > b_start)
-
 
 def normalize_booking_time(v: Any) -> time:
     if isinstance(v, time):
         return v
     return parse_time(str(v)) or time(0, 0)
 
-
 def normalize_booking_date(v: Any) -> date:
     if isinstance(v, date):
         return v
     return parse_date(str(v)) or date.min
 
+def iter_workdays(start_d: date, end_d: date):
+    d = start_d
+    while d <= end_d:
+        if d.weekday() < 5:
+            yield d
+        d += timedelta(days=1)
+
+def build_slots_for_day(d: date) -> List[Tuple[time, time]]:
+    slots = []
+    cur = datetime.combine(d, WORKDAY_START)
+    end = datetime.combine(d, WORKDAY_END)
+    while cur < end:
+        nxt = cur + timedelta(minutes=SLOT_MINUTES)
+        slots.append((cur.time(), nxt.time()))
+        cur = nxt
+    return slots
+
+def next_two_weeks_window() -> Tuple[date, date]:
+    today = datetime.now(TZ).date()
+    return today, today + timedelta(days=13)
 
 def has_conflict(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: str, exclude_id: Optional[int] = None) -> bool:
     init_db()
@@ -294,43 +323,26 @@ def has_conflict(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: st
         conn.close()
         return hit
 
+def default_booking_form() -> Dict[str, str]:
+    now = datetime.now(TZ)
+    return {
+        "booking_date": now.date().isoformat(),
+        "start_time": now.strftime("%H:%M"),
+        "end_time": (now + timedelta(hours=1)).strftime("%H:%M"),
+        "vacuum": "no",
+        "charge_neutralizer": "no",
+    }
 
-def iter_workdays(start_d: date, end_d: date):
-    d = start_d
-    while d <= end_d:
-        if d.weekday() < 5:
-            yield d
-        d += timedelta(days=1)
-
-
-def build_slots_for_day(d: date) -> List[Tuple[time, time]]:
-    slots = []
-    cur = datetime.combine(d, WORKDAY_START)
-    end = datetime.combine(d, WORKDAY_END)
-    while cur < end:
-        nxt = cur + timedelta(minutes=SLOT_MINUTES)
-        slots.append((cur.time(), nxt.time()))
-        cur = nxt
-    return slots
-
-
-def next_two_weeks_window() -> Tuple[date, date]:
-    today = datetime.now(TZ).date()
-    return today, today + timedelta(days=13)
+def merge_prefill(form: Dict[str, str], args: Dict[str, str]) -> Dict[str, str]:
+    out = dict(form)
+    for k in ("booking_date", "start_time", "end_time"):
+        v = (args.get(k) or "").strip()
+        if v:
+            out[k] = v
+    return out
 
 
-def is_slot_free(bookings: List[Dict[str, Any]], d: date, s: time, e: time) -> bool:
-    for b in bookings:
-        bd_date = normalize_booking_date(b["booking_date"])
-        if bd_date != d:
-            continue
-        bs = normalize_booking_time(b["start_time"])
-        be = normalize_booking_time(b["end_time"])
-        if overlaps(s, e, bs, be):
-            return False
-    return True
-
-
+# ---------------- Availability ----------------
 def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) -> List[Dict[str, Any]]:
     init_db()
     if USE_POSTGRES:
@@ -363,6 +375,16 @@ def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) ->
         conn.close()
         return [dict(r) for r in rows]
 
+def is_slot_free(bookings: List[Dict[str, Any]], d: date, s: time, e: time) -> bool:
+    for b in bookings:
+        bd_date = normalize_booking_date(b["booking_date"])
+        if bd_date != d:
+            continue
+        bs = normalize_booking_time(b["start_time"])
+        be = normalize_booking_time(b["end_time"])
+        if overlaps(s, e, bs, be):
+            return False
+    return True
 
 def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
     start_d, end_d = next_two_weeks_window()
@@ -383,83 +405,78 @@ def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
     return days
 
 
-def default_booking_form() -> Dict[str, str]:
-    now = datetime.now(TZ)
-    return {
-        "booking_date": now.date().isoformat(),
-        "start_time": now.strftime("%H:%M"),
-        "end_time": (now + timedelta(hours=1)).strftime("%H:%M"),
-        "vacuum": "no",
-        "charge_neutralizer": "no",
-    }
-
-
-def merge_prefill(form: Dict[str, str], args: Dict[str, str]) -> Dict[str, str]:
-    out = dict(form)
-    for k in ("booking_date", "start_time", "end_time"):
-        v = (args.get(k) or "").strip()
-        if v:
-            out[k] = v
-    return out
-
-
 # ---------------- Email ----------------
-def smtp_ready() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD and SMTP_FROM)
+def smtp_ready_for_lab(lab_slug: str) -> bool:
+    cfg = _smtp_for_lab(lab_slug)
+    return bool(cfg["host"] and cfg["user"] and cfg["password"] and cfg["from"])
 
+def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) -> None:
+    cfg = _smtp_for_lab(lab_slug)
+    if not smtp_ready_for_lab(lab_slug):
+        raise RuntimeError("SMTP is not configured for this lab. Set SMTP_HOST and admin email/password (or SMTP_<LAB>_USER/PASSWORD).")
 
-def send_email(to_email: str, subject: str, body: str) -> None:
-    if not smtp_ready():
-        raise RuntimeError("SMTP is not configured. Set SMTP_HOST/SMTP_PORT and SMTP_USER/SMTP_PASSWORD (or ADMIN_EMAIL/ADMIN_PASSWORD).")
     msg = EmailMessage()
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
+    msg["From"] = f"{SMTP_FROM_NAME} <{cfg['from']}>"
     msg["To"] = to_email
     msg["Subject"] = subject
+    msg["Reply-To"] = ADMIN[lab_slug]["email"]
     msg.set_content(body)
 
-    if SMTP_USE_TLS:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+    if cfg["tls"]:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as s:
             s.ehlo()
             s.starttls()
             s.ehlo()
-            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.login(cfg["user"], cfg["password"])
             s.send_message(msg)
     else:
-        # For implicit SSL (port 465) you may need SMTP_SSL. If needed, we can switch.
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as s:
             s.ehlo()
-            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.login(cfg["user"], cfg["password"])
             s.send_message(msg)
 
 
-# ---------------- Admin Auth ----------------
-def is_admin() -> bool:
-    return bool(session.get("is_admin") is True)
+# ---------------- Admin auth (per lab) ----------------
+def _require_admin_vars(lab_slug: str):
+    if not ADMIN[lab_slug]["email"] or not ADMIN[lab_slug]["password"]:
+        abort(500, description=f"Missing ADMIN_{lab_slug.upper()}_EMAIL or ADMIN_{lab_slug.upper()}_PASSWORD.")
 
+def is_admin_for(lab_slug: str) -> bool:
+    return session.get("is_admin") is True and session.get("admin_lab") == lab_slug
 
-def require_admin():
-    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
-        abort(500, description="ADMIN_EMAIL and ADMIN_PASSWORD must be set on the server.")
-    if not is_admin():
-        return redirect(url_for("admin_login", next=request.path))
+def require_admin(lab_slug: str):
+    _require_admin_vars(lab_slug)
+    if not is_admin_for(lab_slug):
+        return redirect(url_for("admin_login_lab", lab_slug=lab_slug, next=request.path))
     return None
 
+@app.route("/admin/<lab_slug>/login", methods=["GET", "POST"])
+def admin_login_lab(lab_slug: str):
+    if lab_slug not in LABS:
+        abort(404)
+    _require_admin_vars(lab_slug)
 
-@app.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
-        abort(500, description="ADMIN_EMAIL and ADMIN_PASSWORD must be set on the server.")
     if request.method == "POST":
         user = (request.form.get("username") or "").strip()
         pw = (request.form.get("password") or "").strip()
-        if hmac.compare_digest(user.lower(), ADMIN_EMAIL.lower()) and hmac.compare_digest(pw, ADMIN_PASSWORD):
-            session["is_admin"] = True
-            nxt = request.form.get("next") or url_for("index")
-            return redirect(nxt)
-        flash("Invalid credentials.", "error")
-        return render_template("admin_login.html", next=request.form.get("next") or url_for("index"), admin_email=ADMIN_EMAIL)
-    return render_template("admin_login.html", next=request.args.get("next") or url_for("index"), admin_email=ADMIN_EMAIL)
 
+        if hmac.compare_digest(user.lower(), ADMIN[lab_slug]["email"].lower()) and hmac.compare_digest(pw, ADMIN[lab_slug]["password"]):
+            session.clear()
+            session["is_admin"] = True
+            session["admin_lab"] = lab_slug
+            session["admin_email"] = ADMIN[lab_slug]["email"]
+            nxt = request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug)
+            return redirect(nxt)
+
+        flash("Invalid credentials.", "error")
+
+    return render_template(
+        "admin_login.html",
+        lab_slug=lab_slug,
+        lab_title=LABS[lab_slug]["title"],
+        admin_email_hint=ADMIN[lab_slug]["email"],
+        next=request.args.get("next") or url_for("admin_lab", lab_slug=lab_slug),
+    )
 
 @app.get("/admin/logout")
 def admin_logout():
@@ -467,7 +484,7 @@ def admin_logout():
     return redirect(url_for("index"))
 
 
-# ---------------- DB access (CRUD) ----------------
+# ---------------- DB CRUD ----------------
 def _row_to_dict_pg(row: Any, cols: List[str]) -> Dict[str, Any]:
     d = dict(zip(cols, row))
     out: Dict[str, Any] = {}
@@ -481,7 +498,6 @@ def _row_to_dict_pg(row: Any, cols: List[str]) -> Dict[str, Any]:
         else:
             out[k] = str(v)
     return out
-
 
 def db_list_bookings(lab_slug: str) -> List[Dict[str, Any]]:
     init_db()
@@ -511,7 +527,6 @@ def db_list_bookings(lab_slug: str) -> List[Dict[str, Any]]:
                     d[k] = str(v)
             out.append(d)
         return out
-
 
 def db_get_booking(booking_id: int) -> Optional[Dict[str, Any]]:
     init_db()
@@ -543,7 +558,6 @@ def db_get_booking(booking_id: int) -> Optional[Dict[str, Any]]:
             else:
                 d[k] = str(v)
         return d
-
 
 def db_insert_booking(payload: Dict[str, Any]) -> int:
     init_db()
@@ -627,7 +641,6 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
         conn.close()
         return int(booking_id)
 
-
 def db_update_booking_time(booking_id: int, new_date: str, new_start: str, new_end: str, updated_by: str) -> None:
     init_db()
     now_iso = datetime.utcnow().isoformat(timespec="seconds") + "Z"
@@ -671,7 +684,6 @@ def collect_selected_slots() -> List[Tuple[str, str, str]]:
         d, s, e = parts
         if parse_date(d) and parse_time(s) and parse_time(e):
             slots.append((d, s, e))
-    # deduplicate
     return sorted(list({x for x in slots}))
 
 
@@ -679,7 +691,6 @@ def collect_selected_slots() -> List[Tuple[str, str, str]]:
 @app.get("/health")
 def health():
     return {"status": "ok"}, 200
-
 
 @app.route("/")
 def index():
@@ -689,14 +700,12 @@ def index():
     ]
     return render_template("index.html", labs=labs)
 
-
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
     days = availability_days(lab_slug)
     return render_template("availability.html", lab_slug=lab_slug, lab_title=LABS[lab_slug]["title"], days=days)
-
 
 @app.route("/labs/furnace", methods=["GET", "POST"])
 def furnace():
@@ -715,7 +724,6 @@ def furnace():
     days = availability_days("furnace")
     return render_template("furnace.html", lab=lab_info, form=form, days=days)
 
-
 @app.route("/labs/xps", methods=["GET", "POST"])
 def xps():
     lab_info = {
@@ -729,7 +737,6 @@ def xps():
     form = merge_prefill(default_booking_form(), request.args)
     days = availability_days("xps")
     return render_template("xps.html", lab=lab_info, form=form, days=days)
-
 
 def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
     lab_slug = lab_info["slug"]
@@ -774,7 +781,7 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
     group_id = str(uuid.uuid4()) if selected_slots else None
     created_ids: List[int] = []
 
-    base = {
+    base_payload = {
         "lab_slug": lab_slug,
         "booking_group_id": group_id,
         "user_name": user_name,
@@ -817,18 +824,17 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
 
     if selected_slots:
         for d, s, e in selected_slots:
-            payload = dict(base)
+            payload = dict(base_payload)
             payload.update(extra)
             payload.update({"booking_date": d, "start_time": s, "end_time": e})
             created_ids.append(db_insert_booking(payload))
     else:
-        payload = dict(base)
+        payload = dict(base_payload)
         payload.update(extra)
         payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time})
         created_ids.append(db_insert_booking(payload))
 
     return redirect(url_for("booking_success", booking_id=created_ids[-1]))
-
 
 @app.route("/bookings/<int:booking_id>")
 def booking_success(booking_id: int):
@@ -838,17 +844,19 @@ def booking_success(booking_id: int):
         return redirect(url_for("index"))
     return render_template("success.html", b=b)
 
-
-# ---- Admin pages: separate per lab ----
-@app.route("/admin/<lab_slug>", methods=["GET"])
+# ---- Admin per-lab ----
+@app.route("/admin/<lab_slug>")
 def admin_lab(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
+
     rows = db_list_bookings(lab_slug)
     days = availability_days(lab_slug)
+    admin_email = session.get("admin_email", "")
+
     template = "admin_furnace.html" if lab_slug == "furnace" else "admin_xps.html"
     return render_template(
         template,
@@ -856,27 +864,25 @@ def admin_lab(lab_slug: str):
         lab_slug=lab_slug,
         rows=rows,
         days=days,
-        admin_email=ADMIN_EMAIL,
-        smtp_ready=smtp_ready(),
+        admin_email=admin_email,
+        smtp_ready=smtp_ready_for_lab(lab_slug),
     )
-
 
 @app.post("/admin/<lab_slug>/reserve")
 def admin_reserve_slots(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
 
     selected_slots = collect_selected_slots()
-
     booking_date = (request.form.get("booking_date") or "").strip()
     start_time = (request.form.get("start_time") or "").strip()
     end_time = (request.form.get("end_time") or "").strip()
 
     user_name = (request.form.get("user_name") or "").strip() or "ADMIN RESERVED"
-    user_email = (request.form.get("user_email") or "").strip() or ADMIN_EMAIL
+    user_email = (request.form.get("user_email") or "").strip() or session.get("admin_email", "")
     notes = (request.form.get("notes") or "").strip() or "Reserved by admin"
 
     errors: List[str] = []
@@ -903,6 +909,8 @@ def admin_reserve_slots(lab_slug: str):
 
     group_id = str(uuid.uuid4()) if selected_slots else None
     created = 0
+    admin_email = session.get("admin_email", "")
+
     for d, s, e in (selected_slots or [(booking_date, start_time, end_time)]):
         payload = {
             "lab_slug": lab_slug,
@@ -914,7 +922,7 @@ def admin_reserve_slots(lab_slug: str):
             "start_time": s,
             "end_time": e,
             "updated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "updated_by": ADMIN_EMAIL,
+            "updated_by": admin_email,
         }
         db_insert_booking(payload)
         created += 1
@@ -922,12 +930,11 @@ def admin_reserve_slots(lab_slug: str):
     flash(f"Reserved {created} slot(s).", "ok")
     return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
-
 @app.get("/admin/<lab_slug>/edit/<int:booking_id>")
 def admin_edit_booking(lab_slug: str, booking_id: int):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
 
@@ -943,16 +950,15 @@ def admin_edit_booking(lab_slug: str, booking_id: int):
         lab_title=LABS[lab_slug]["title"],
         b=b,
         days=days,
-        smtp_ready=smtp_ready(),
-        admin_email=ADMIN_EMAIL,
+        smtp_ready=smtp_ready_for_lab(lab_slug),
+        admin_email=session.get("admin_email", ""),
     )
-
 
 @app.post("/admin/<lab_slug>/edit/<int:booking_id>")
 def admin_update_booking(lab_slug: str, booking_id: int):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
 
@@ -985,9 +991,9 @@ def admin_update_booking(lab_slug: str, booking_id: int):
     old = f"{b.get('booking_date')} {str(b.get('start_time'))[:5]}–{str(b.get('end_time'))[:5]}"
     new = f"{new_date} {new_start}–{new_end}"
 
-    db_update_booking_time(booking_id, new_date, new_start, new_end, updated_by=ADMIN_EMAIL)
+    admin_email = session.get("admin_email", "")
+    db_update_booking_time(booking_id, new_date, new_start, new_end, updated_by=admin_email)
 
-    # Send email to user
     try:
         subject = f"Booking updated: {LABS[lab_slug]['title']}"
         body = (
@@ -995,32 +1001,30 @@ def admin_update_booking(lab_slug: str, booking_id: int):
             f"Your booking for {LABS[lab_slug]['title']} has been updated by the lab administrator.\n\n"
             f"Old slot: {old}\n"
             f"New slot: {new}\n\n"
-            f"If you have any questions, reply to this email or contact: {ADMIN_EMAIL}\n\n"
+            f"If you have any questions, reply to this email.\n\n"
             f"Regards,\n"
             f"{SMTP_FROM_NAME}\n"
         )
-        if smtp_ready():
-            send_email(b.get("user_email", ""), subject, body)
+        if smtp_ready_for_lab(lab_slug):
+            send_email_for_lab(lab_slug, b.get("user_email", ""), subject, body)
             flash("Booking updated and email sent to user.", "ok")
         else:
-            flash("Booking updated. SMTP is not configured, so no email was sent.", "error")
+            flash("Booking updated. SMTP not configured for this lab, so no email was sent.", "error")
     except Exception as e:
         flash(f"Booking updated, but email sending failed: {e}", "error")
 
     return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
-
-# ---- Admin exports ----
+# ---- Export ----
 def export_rows(lab_slug: str) -> List[Dict[str, Any]]:
     rows = db_list_bookings(lab_slug)
     return [{c: r.get(c, "") for c in EXPORT_COLUMNS} for r in rows]
-
 
 @app.get("/admin/export/<lab_slug>.csv")
 def admin_export_csv(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
 
@@ -1035,12 +1039,11 @@ def admin_export_csv(lab_slug: str):
     resp.headers["Content-Disposition"] = f'attachment; filename="{lab_slug}_bookings.csv"'
     return resp
 
-
 @app.get("/admin/export/<lab_slug>.xlsx")
 def admin_export_xlsx(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
-    guard = require_admin()
+    guard = require_admin(lab_slug)
     if guard is not None:
         return guard
 
@@ -1061,13 +1064,11 @@ def admin_export_xlsx(lab_slug: str):
     resp.headers["Content-Disposition"] = f'attachment; filename="{lab_slug}_bookings.xlsx"'
     return resp
 
-
 # --- bootstrap ---
 try:
     init_db()
 except Exception:
     pass
-
 
 if __name__ == "__main__":
     init_db()

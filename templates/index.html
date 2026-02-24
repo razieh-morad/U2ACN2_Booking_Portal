@@ -1,24 +1,45 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Lab Booking Portal</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head><body>
-<header class="topbar"><div class="container">
-<h1>Lab Booking Portal</h1><p class="sub">UNESCO-UNISA-iTL/NRF Chair</p>
-</div></header>
-<main class="container">
-<div class="card"><h2>Available labs</h2><div class="grid">
-{% for lab in labs %}
-  {% if lab.slug == 'furnace' %}<a class="lab" href="{{ url_for('furnace') }}">
-  {% elif lab.slug == 'xps' %}<a class="lab" href="{{ url_for('xps') }}">
-  {% else %}<a class="lab" href="#">{% endif %}
-    <div class="lab-title">{{ lab.title }}</div>
-    <div class="lab-sub">{{ lab.subtitle }}</div>
-    <div class="lab-cta">Open →</div>
-  </a>
-{% endfor %}
-</div></div>
-<div class="hint">Admin: <a href="{{ url_for('admin_login', next=url_for('admin_bookings', lab_slug='furnace')) }}">Login</a> · <a href="{{ url_for('admin_logout') }}">Logout</a></div>
-</main></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>U2ACN2 Nanolab Booking Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <h1>U2ACN2 Nanolab Booking Portal</h1>
+      <p class="sub">UNESCO-UNISA-iTL/NRF Chair</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>Labs</h2>
+      <div class="grid">
+        {% for lab in labs %}
+          {% if lab.slug == 'furnace' %}
+            <a class="lab" href="{{ url_for('furnace') }}">
+          {% elif lab.slug == 'xps' %}
+            <a class="lab" href="{{ url_for('xps') }}">
+          {% else %}
+            <a class="lab" href="#">
+          {% endif %}
+              <div class="lab-title">{{ lab.title }}</div>
+              <div class="lab-sub">{{ lab.subtitle }}</div>
+              <div class="lab-cta">Open →</div>
+            </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="hint">
+      Admin:
+      <a href="{{ url_for('admin_lab', lab_slug='furnace') }}">Furnace</a> ·
+      <a href="{{ url_for('admin_lab', lab_slug='xps') }}">XPS</a> ·
+      <a href="{{ url_for('admin_logout') }}">Logout</a>
+    </div>
+  </main>
+</body>
+</html>

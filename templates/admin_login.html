@@ -1,26 +1,42 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Admin Login</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head><body>
-<header class="topbar"><div class="container">
-<a class="back" href="{{ url_for('index') }}">← Labs</a>
-<h1>Admin login</h1><p class="sub">Enter your admin credentials.</p>
-</div></header>
-<main class="container">
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    <div class="alerts">{% for category, msg in messages %}<div class="alert {{ category }}">{{ msg }}</div>{% endfor %}</div>
-  {% endif %}
-{% endwith %}
-<form class="card" method="post">
-  <input type="hidden" name="next" value="{{ next }}" />
-  <div class="row">
-    <label>Username<input name="username" autocomplete="username" /></label>
-    <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
-  </div>
-  <div class="actions"><button type="submit">Login</button><a class="secondary" href="{{ url_for('index') }}">Cancel</a></div>
-</form>
-</main></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Login | {{ lab_title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>Admin login</h1>
+      <p class="sub">{{ lab_title }}</p>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts">
+          {% for category, msg in messages %}
+            <div class="alert {{ category }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post">
+      <input type="hidden" name="next" value="{{ next }}" />
+      <div class="row">
+        <label>Email<input name="username" type="email" placeholder="{{ admin_email_hint }}" autocomplete="username" /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
+      </div>
+      <div class="actions">
+        <button type="submit">Login</button>
+        <a class="secondary" href="{{ url_for('index') }}">Cancel</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
