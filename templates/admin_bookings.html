@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin | {{ lab_title }} bookings</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>{{ lab_title }} · Bookings</h1>
+      <p class="sub">Prototype admin list (add login + export later).</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div class="actions">
+        <a href="{{ url_for('furnace') }}">New booking</a>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Nanomaterial</th>
+            <th>Anneal</th>
+            <th>Gas</th>
+            <th>Pressure</th>
+            <th>Vacuum</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td>{{ r.booking_date }}</td>
+              <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
+              <td>{{ r.user_name }}</td>
+              <td>{{ r.user_email }}</td>
+              <td>{{ r.nanomaterial_type }}</td>
+              <td>{{ r.anneal_temp_c }} °C / {{ r.anneal_time_h }} h</td>
+              <td>{{ r.gas_type }}</td>
+              <td>{{ r.pressure }}</td>
+              <td>{{ "Yes" if r.vacuum else "No" }}</td>
+              <td>{{ r.created_at }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="11" class="empty">No bookings yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

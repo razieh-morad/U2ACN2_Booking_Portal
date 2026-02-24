@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lab Booking Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <h1>Lab Booking Portal</h1>
+      <p class="sub">UNISA–UNESCO Chair (iThemba Labs)</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>Available labs</h2>
+      <div class="grid">
+        {% for lab in labs %}
+          <a class="lab" href="{{ url_for('furnace') if lab.slug=='furnace' else '#' }}">
+            <div class="lab-title">{{ lab.title }}</div>
+            <div class="lab-sub">{{ lab.subtitle }}</div>
+            <div class="lab-cta">Book a slot →</div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="hint">
+      Admin view (prototype): <a href="{{ url_for('admin_furnace_bookings') }}">/admin/bookings/furnace</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">Prototype. Add authentication before public use.</div>
+  </footer>
+</body>
+</html>
