@@ -10,7 +10,7 @@
   <header class="topbar">
     <div class="container">
       <h1>Lab Booking Portal</h1>
-      <p class="sub">UNISA–UNESCO Chair (iThemba Labs)</p>
+      <p class="sub">UNESCO-UNISA-iTL/NRF Chair</p>
     </div>
   </header>
 
@@ -19,17 +19,24 @@
       <h2>Available labs</h2>
       <div class="grid">
         {% for lab in labs %}
-          <a class="lab" href="{{ url_for('furnace') if lab.slug=='furnace' else '#' }}">
-            <div class="lab-title">{{ lab.title }}</div>
-            <div class="lab-sub">{{ lab.subtitle }}</div>
-            <div class="lab-cta">Book a slot →</div>
-          </a>
+          {% if lab.slug == 'furnace' %}
+            <a class="lab" href="{{ url_for('furnace') }}">
+          {% elif lab.slug == 'xps' %}
+            <a class="lab" href="{{ url_for('xps') }}">
+          {% else %}
+            <a class="lab" href="#">
+          {% endif %}
+              <div class="lab-title">{{ lab.title }}</div>
+              <div class="lab-sub">{{ lab.subtitle }}</div>
+              <div class="lab-cta">Open →</div>
+            </a>
         {% endfor %}
       </div>
     </div>
 
     <div class="hint">
-      Admin view (prototype): <a href="{{ url_for('admin_furnace_bookings') }}">/admin/bookings/furnace</a>
+      Admin (prototype): <a href="{{ url_for('admin_bookings', lab_slug='furnace') }}">Furnace bookings</a> ·
+      <a href="{{ url_for('admin_bookings', lab_slug='xps') }}">XPS bookings</a>
     </div>
   </main>
 

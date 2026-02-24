@@ -18,7 +18,13 @@
   <main class="container">
     <div class="card">
       <div class="actions">
-        <a href="{{ url_for('furnace') }}">New booking</a>
+        {% if lab_slug == 'furnace' %}
+          <a href="{{ url_for('furnace') }}">New booking</a>
+          <a class="secondary" href="{{ url_for('furnace_availability') }}">Availability</a>
+        {% elif lab_slug == 'xps' %}
+          <a href="{{ url_for('xps') }}">New booking</a>
+          <a class="secondary" href="{{ url_for('xps_availability') }}">Availability</a>
+        {% endif %}
       </div>
 
       <table class="table">
@@ -29,11 +35,7 @@
             <th>Time</th>
             <th>Name</th>
             <th>Email</th>
-            <th>Nanomaterial</th>
-            <th>Anneal</th>
-            <th>Gas</th>
-            <th>Pressure</th>
-            <th>Vacuum</th>
+            <th>Notes</th>
             <th>Created</th>
           </tr>
         </thead>
@@ -45,15 +47,11 @@
               <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
               <td>{{ r.user_name }}</td>
               <td>{{ r.user_email }}</td>
-              <td>{{ r.nanomaterial_type }}</td>
-              <td>{{ r.anneal_temp_c }} °C / {{ r.anneal_time_h }} h</td>
-              <td>{{ r.gas_type }}</td>
-              <td>{{ r.pressure }}</td>
-              <td>{{ "Yes" if r.vacuum else "No" }}</td>
+              <td>{{ r.notes }}</td>
               <td>{{ r.created_at }}</td>
             </tr>
           {% else %}
-            <tr><td colspan="11" class="empty">No bookings yet.</td></tr>
+            <tr><td colspan="7" class="empty">No bookings yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

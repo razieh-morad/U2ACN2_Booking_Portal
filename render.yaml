@@ -10,3 +10,5 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: APP_TZ
+        value: Africa/Johannesburg

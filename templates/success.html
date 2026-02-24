@@ -19,18 +19,16 @@
     <div class="card">
       <h2>Details</h2>
       <div class="kv">
+        <div><span>Lab</span><strong>{{ b.lab_slug }}</strong></div>
         <div><span>Date</span><strong>{{ b.booking_date }}</strong></div>
         <div><span>Time</span><strong>{{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</strong></div>
         <div><span>Name</span><strong>{{ b.user_name }}</strong></div>
         <div><span>Email</span><strong>{{ b.user_email }}</strong></div>
-        <div><span>Vacuum</span><strong>{{ "Yes" if b.vacuum else "No" }}</strong></div>
       </div>
 
-      <p class="hint">To change or cancel, contact the lab administrators (add a cancel link later).</p>
-
       <div class="actions">
-        <a class="secondary" href="{{ url_for('admin_furnace_bookings') }}">View bookings</a>
-        <a href="{{ url_for('furnace') }}">New booking</a>
+        <a class="secondary" href="{{ url_for('admin_bookings', lab_slug=b.lab_slug) }}">View bookings</a>
+        <a href="{{ url_for('index') }}">Back to labs</a>
       </div>
     </div>
   </main>

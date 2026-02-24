@@ -11,7 +11,7 @@
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab.title }}</h1>
-      <p class="sub">{{ lab.brand }} · Furnace type: {{ lab.furnace_type }}</p>
+      <p class="sub">{{ lab.brand }} · Instrument: {{ lab.instrument }}</p>
       <p class="sub">
         Administrators:
         {% for a in lab.administrators %}
@@ -19,8 +19,8 @@
         {% endfor %}
       </p>
       <nav class="tabs">
-        <a class="tab active" href="{{ url_for('furnace') }}">Booking</a>
-        <a class="tab" href="{{ url_for('furnace_availability') }}">Availability (next 2 weeks)</a>
+        <a class="tab active" href="{{ url_for('xps') }}">Booking</a>
+        <a class="tab" href="{{ url_for('xps_availability') }}">Availability (next 2 weeks)</a>
       </nav>
     </div>
   </header>
@@ -65,77 +65,57 @@
         </label>
       </div>
 
-      <h2>2) Furnace processing details</h2>
+      <h2>2) Sample + measurement details</h2>
 
       <div class="row">
         <label>
-          Type of Nanomaterial
-          <input name="nanomaterial_type" value="{{ form.get('nanomaterial_type','') }}" />
+          Sample name / ID
+          <input name="sample_name" value="{{ form.get('sample_name','') }}" />
         </label>
         <label>
-          Melting Point
-          <input name="melting_point" value="{{ form.get('melting_point','') }}" />
+          Number of samples
+          <input name="sample_count" inputmode="numeric" value="{{ form.get('sample_count','') }}" />
         </label>
       </div>
 
       <div class="row">
         <label>
-          Material Density
-          <input name="material_density" value="{{ form.get('material_density','') }}" />
+          Elements of interest (e.g., C, O, N, S, Cu, Ag…)
+          <input name="elements_of_interest" value="{{ form.get('elements_of_interest','') }}" />
         </label>
         <label>
-          Annealing Temperature (°C)
-          <input name="anneal_temp_c" value="{{ form.get('anneal_temp_c','') }}" />
-        </label>
-        <label>
-          Annealing Time (hrs)
-          <input name="anneal_time_h" value="{{ form.get('anneal_time_h','') }}" />
-        </label>
-      </div>
-
-      <div class="row">
-        <label>
-          Type of Gas
-          <input name="gas_type" value="{{ form.get('gas_type','') }}" />
-        </label>
-        <label>
-          Amount of Pressure
-          <input name="pressure" value="{{ form.get('pressure','') }}" />
+          Analysis type (Survey / High-res / Depth profile)
+          <input name="analysis_type" value="{{ form.get('analysis_type','') }}" />
         </label>
       </div>
 
       <div class="row">
         <div class="radio">
-          <div class="radio-title">Vacuum (Yes/No)</div>
-          <label><input type="radio" name="vacuum" value="yes" {% if form.get('vacuum')=='yes' %}checked{% endif %} /> Yes</label>
-          <label><input type="radio" name="vacuum" value="no"  {% if form.get('vacuum','no')=='no' %}checked{% endif %} /> No</label>
+          <div class="radio-title">Charge neutralizer</div>
+          <label><input type="radio" name="charge_neutralizer" value="yes" {% if form.get('charge_neutralizer')=='yes' %}checked{% endif %} /> Yes</label>
+          <label><input type="radio" name="charge_neutralizer" value="no"  {% if form.get('charge_neutralizer','no')=='no' %}checked{% endif %} /> No</label>
         </div>
+        <label>
+          Mounting method (tape / clip / stub / pellet)
+          <input name="mounting_method" value="{{ form.get('mounting_method','') }}" />
+        </label>
       </div>
+
+      <label>
+        Outgassing risk / vacuum compatibility notes
+        <input name="outgassing_risk" value="{{ form.get('outgassing_risk','') }}" />
+      </label>
 
       <label>
         Notes
         <textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea>
       </label>
 
-      <div class="notes">
-        <ul>
-          <li>Ensure safety protocols and PPE are followed at all times.</li>
-          <li>Record actual furnace setpoints and observed values in your lab notebook.</li>
-        </ul>
-        <div class="nb">
-          NB: For gas flow and connection, please contact the administrators before starting any new experiment.
-        </div>
-      </div>
-
       <div class="actions">
         <button type="submit">Submit booking</button>
-        <a class="secondary" href="{{ url_for('admin_bookings', lab_slug='furnace') }}">View bookings</a>
+        <a class="secondary" href="{{ url_for('admin_bookings', lab_slug='xps') }}">View bookings</a>
       </div>
     </form>
   </main>
-
-  <footer class="footer">
-    <div class="container">Prototype. Add login, approval workflow, and email notifications before rollout.</div>
-  </footer>
 </body>
 </html>
