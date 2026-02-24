@@ -1,118 +1,69 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin | {{ lab_title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="container">
-      <a class="back" href="{{ url_for('index') }}">← Labs</a>
-      <h1>{{ lab_title }}</h1>
-      <p class="sub">Admin panel</p>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin | {{ lab_title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head><body>
+<header class="topbar"><div class="container">
+<a class="back" href="{{ url_for('index') }}">← Labs</a>
+<h1>{{ lab_title }}</h1><p class="sub">Admin panel</p>
+<nav class="tabs">
+  {% if lab_slug == 'furnace' %}<a class="tab" href="{{ url_for('furnace') }}">Booking page</a><a class="tab" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Availability</a>{% endif %}
+  {% if lab_slug == 'xps' %}<a class="tab" href="{{ url_for('xps') }}">Booking page</a><a class="tab" href="{{ url_for('lab_availability', lab_slug='xps') }}">Availability</a>{% endif %}
+  <a class="tab active" href="{{ url_for('admin_bookings', lab_slug=lab_slug) }}">Admin</a>
+  <a class="tab" href="{{ url_for('admin_logout') }}">Logout</a>
+</nav>
+</div></header>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="alerts">{% for category, msg in messages %}<div class="alert {{ category }}">{{ msg }}</div>{% endfor %}</div>
+  {% endif %}
+{% endwith %}
+<div class="card">
+  <h2>Export bookings</h2>
+  <div class="actions">
+    <a href="{{ url_for('admin_export_csv', lab_slug=lab_slug) }}" class="secondary">Download CSV</a>
+    <a href="{{ url_for('admin_export_xlsx', lab_slug=lab_slug) }}" class="secondary">Download Excel</a>
+  </div>
+</div>
 
-      <nav class="tabs">
-        {% if lab_slug == 'furnace' %}
-          <a class="tab" href="{{ url_for('furnace') }}">Booking page</a>
-          <a class="tab" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Availability</a>
-        {% elif lab_slug == 'xps' %}
-          <a class="tab" href="{{ url_for('xps') }}">Booking page</a>
-          <a class="tab" href="{{ url_for('lab_availability', lab_slug='xps') }}">Availability</a>
-        {% endif %}
-        <a class="tab active" href="{{ url_for('admin_bookings', lab_slug=lab_slug) }}">Admin</a>
-        <a class="tab" href="{{ url_for('admin_logout') }}">Logout</a>
-      </nav>
-    </div>
-  </header>
+<form class="card" method="post" action="{{ url_for('admin_quickbook', lab_slug=lab_slug) }}">
+  <h2>Admin quick booking (reserve a slot)</h2>
+  <div class="row">
+    <label>Name (optional)<input name="user_name" placeholder="ADMIN" /></label>
+    <label>Email (optional)<input name="user_email" placeholder="admin@local" /></label>
+  </div>
+  <div class="row">
+    <label>Date *<input name="booking_date" type="date" required /></label>
+    <label>Start time *<input name="start_time" type="time" required /></label>
+    <label>End time *<input name="end_time" type="time" required /></label>
+  </div>
+  <label>Notes<input name="notes" placeholder="Reserved / maintenance / VIP booking..." /></label>
+  <div class="actions"><button type="submit">Create booking</button></div>
+  <p class="hint">This uses the same conflict rules as the student form.</p>
+</form>
 
-  <main class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="alerts">
-          {% for category, msg in messages %}
-            <div class="alert {{ category }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <div class="card">
-      <h2>Export bookings</h2>
-      <div class="actions">
-        <a href="{{ url_for('admin_export_csv', lab_slug=lab_slug) }}" class="secondary">Download CSV</a>
-        <a href="{{ url_for('admin_export_xlsx', lab_slug=lab_slug) }}" class="secondary">Download Excel</a>
-      </div>
-    </div>
-
-    <form class="card" method="post" action="{{ url_for('admin_quickbook', lab_slug=lab_slug) }}">
-      <h2>Admin quick booking (reserve a slot)</h2>
-      <div class="row">
-        <label>
-          Name (optional)
-          <input name="user_name" placeholder="ADMIN" />
-        </label>
-        <label>
-          Email (optional)
-          <input name="user_email" placeholder="admin@local" />
-        </label>
-      </div>
-      <div class="row">
-        <label>
-          Date *
-          <input name="booking_date" type="date" required />
-        </label>
-        <label>
-          Start time *
-          <input name="start_time" type="time" required />
-        </label>
-        <label>
-          End time *
-          <input name="end_time" type="time" required />
-        </label>
-      </div>
-      <label>
-        Notes
-        <input name="notes" placeholder="Reserved / maintenance / VIP booking..." />
-      </label>
-      <div class="actions">
-        <button type="submit">Create booking</button>
-      </div>
-      <p class="hint">This uses the same conflict rules as the student form.</p>
-    </form>
-
-    <div class="card">
-      <h2>Bookings</h2>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Notes</th>
-            <th>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in rows %}
-            <tr>
-              <td>{{ r.id }}</td>
-              <td>{{ r.booking_date }}</td>
-              <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
-              <td>{{ r.user_name }}</td>
-              <td>{{ r.user_email }}</td>
-              <td>{{ r.notes }}</td>
-              <td>{{ r.created_at }}</td>
-            </tr>
-          {% else %}
-            <tr><td colspan="7" class="empty">No bookings yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </main>
-</body>
-</html>
+<div class="card">
+  <h2>Bookings</h2>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th><th>Notes</th><th>Created</th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td>{{ r.booking_date }}</td>
+          <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
+          <td>{{ r.user_name }}</td>
+          <td>{{ r.user_email }}</td>
+          <td>{{ r.notes }}</td>
+          <td>{{ r.created_at }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty">No bookings yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</main></body></html>

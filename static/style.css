@@ -37,16 +37,13 @@ button, .actions a { padding:10px 14px; border-radius:12px; border:1px solid rgb
 .kv { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-top:10px; }
 .kv div { border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:rgba(255,255,255,0.02); }
 .kv span { display:block; color:var(--muted); font-size:12px; margin-bottom:6px; }
-
 .tabs { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; }
 .tab { padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text); font-weight:700; }
 .tab.active { border-color: rgba(110,168,254,0.55); background: rgba(110,168,254,0.12); }
-
 .legend { display:flex; gap:14px; align-items:center; color:var(--muted); margin-bottom:10px; flex-wrap:wrap; }
 .dot { width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
 .dot.free { background: var(--ok); }
 .dot.booked { background: var(--danger); }
-
 .day-title { margin:16px 0 8px 0; font-size:16px; color:var(--text); }
 .slot-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:14px; }
 .slot { border-radius:14px; border:1px solid var(--line); padding:10px 12px; background:rgba(255,255,255,0.02); display:block; }

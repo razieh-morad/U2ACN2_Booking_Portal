@@ -1,128 +1,64 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ lab.title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="container">
-      <a class="back" href="{{ url_for('index') }}">← Labs</a>
-      <h1>{{ lab.title }}</h1>
-      <p class="sub">{{ lab.brand }}</p>
-      <p class="sub">
-        Administrators:
-        {% for a in lab.administrators %}
-          <span class="pill">{{ a.name }} ({{ a.contact }})</span>
-        {% endfor %}
-      </p>
-
-      <nav class="tabs">
-        <a class="tab active" href="{{ url_for('furnace') }}">Booking</a>
-        <a class="tab" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Availability</a>
-      </nav>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{ lab.title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head><body>
+<header class="topbar"><div class="container">
+<a class="back" href="{{ url_for('index') }}">← Labs</a>
+<h1>{{ lab.title }}</h1>
+<p class="sub">{{ lab.brand }}</p>
+<p class="sub">Administrators:
+{% for a in lab.administrators %}<span class="pill">{{ a.name }} ({{ a.contact }})</span>{% endfor %}
+</p>
+<nav class="tabs">
+  <a class="tab active" href="{{ url_for('furnace') }}">Booking</a>
+  <a class="tab" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Availability</a>
+</nav>
+</div></header>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="alerts">{% for category, msg in messages %}<div class="alert {{ category }}">{{ msg }}</div>{% endfor %}</div>
+  {% endif %}
+{% endwith %}
+<form class="card" method="post" novalidate>
+  <h2>1) Booking details</h2>
+  <div class="row">
+    <label>Your name *<input name="user_name" value="{{ form.get('user_name','') }}" required /></label>
+    <label>Email *<input name="user_email" type="email" value="{{ form.get('user_email','') }}" required /></label>
+  </div>
+  <div class="row">
+    <label>Date *<input name="booking_date" type="date" value="{{ form.get('booking_date','') }}" required /></label>
+    <label>Start time *<input name="start_time" type="time" value="{{ form.get('start_time','') }}" required /></label>
+    <label>End time *<input name="end_time" type="time" value="{{ form.get('end_time','') }}" required /></label>
+  </div>
+  <h2>2) Furnace processing details</h2>
+  <div class="row">
+    <label>Type of Nanomaterial<input name="nanomaterial_type" value="{{ form.get('nanomaterial_type','') }}" /></label>
+    <label>Melting Point<input name="melting_point" value="{{ form.get('melting_point','') }}" /></label>
+  </div>
+  <div class="row">
+    <label>Material Density<input name="material_density" value="{{ form.get('material_density','') }}" /></label>
+    <label>Annealing Temperature (°C)<input name="anneal_temp_c" value="{{ form.get('anneal_temp_c','') }}" /></label>
+    <label>Annealing Time (hrs)<input name="anneal_time_h" value="{{ form.get('anneal_time_h','') }}" /></label>
+  </div>
+  <div class="row">
+    <label>Type of Gas<input name="gas_type" value="{{ form.get('gas_type','') }}" /></label>
+    <label>Amount of Pressure<input name="pressure" value="{{ form.get('pressure','') }}" /></label>
+  </div>
+  <div class="row">
+    <div class="radio">
+      <div class="radio-title">Vacuum (Yes/No)</div>
+      <label><input type="radio" name="vacuum" value="yes" {% if form.get('vacuum')=='yes' %}checked{% endif %}/> Yes</label>
+      <label><input type="radio" name="vacuum" value="no" {% if form.get('vacuum','no')=='no' %}checked{% endif %}/> No</label>
     </div>
-  </header>
-
-  <main class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="alerts">
-          {% for category, msg in messages %}
-            <div class="alert {{ category }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <form class="card" method="post" novalidate>
-      <h2>1) Booking details</h2>
-
-      <div class="row">
-        <label>
-          Your name *
-          <input name="user_name" value="{{ form.get('user_name','') }}" required />
-        </label>
-        <label>
-          Email *
-          <input name="user_email" type="email" value="{{ form.get('user_email','') }}" required />
-        </label>
-      </div>
-
-      <div class="row">
-        <label>
-          Date *
-          <input name="booking_date" type="date" value="{{ form.get('booking_date','') }}" required />
-        </label>
-        <label>
-          Start time *
-          <input name="start_time" type="time" value="{{ form.get('start_time','') }}" required />
-        </label>
-        <label>
-          End time *
-          <input name="end_time" type="time" value="{{ form.get('end_time','') }}" required />
-        </label>
-      </div>
-
-      <h2>2) Furnace processing details</h2>
-
-      <div class="row">
-        <label>
-          Type of Nanomaterial
-          <input name="nanomaterial_type" value="{{ form.get('nanomaterial_type','') }}" />
-        </label>
-        <label>
-          Melting Point
-          <input name="melting_point" value="{{ form.get('melting_point','') }}" />
-        </label>
-      </div>
-
-      <div class="row">
-        <label>
-          Material Density
-          <input name="material_density" value="{{ form.get('material_density','') }}" />
-        </label>
-        <label>
-          Annealing Temperature (°C)
-          <input name="anneal_temp_c" value="{{ form.get('anneal_temp_c','') }}" />
-        </label>
-        <label>
-          Annealing Time (hrs)
-          <input name="anneal_time_h" value="{{ form.get('anneal_time_h','') }}" />
-        </label>
-      </div>
-
-      <div class="row">
-        <label>
-          Type of Gas
-          <input name="gas_type" value="{{ form.get('gas_type','') }}" />
-        </label>
-        <label>
-          Amount of Pressure
-          <input name="pressure" value="{{ form.get('pressure','') }}" />
-        </label>
-      </div>
-
-      <div class="row">
-        <div class="radio">
-          <div class="radio-title">Vacuum (Yes/No)</div>
-          <label><input type="radio" name="vacuum" value="yes" {% if form.get('vacuum')=='yes' %}checked{% endif %} /> Yes</label>
-          <label><input type="radio" name="vacuum" value="no"  {% if form.get('vacuum','no')=='no' %}checked{% endif %} /> No</label>
-        </div>
-      </div>
-
-      <label>
-        Notes
-        <textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea>
-      </label>
-
-      <div class="actions">
-        <button type="submit">Submit booking</button>
-        <a class="secondary" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Check availability</a>
-      </div>
-    </form>
-  </main>
-</body>
-</html>
+  </div>
+  <label>Notes<textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea></label>
+  <div class="actions">
+    <button type="submit">Submit booking</button>
+    <a class="secondary" href="{{ url_for('lab_availability', lab_slug='furnace') }}">Check availability</a>
+  </div>
+</form>
+</main></body></html>

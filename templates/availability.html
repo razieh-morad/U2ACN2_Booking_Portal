@@ -1,59 +1,40 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ lab_title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="container">
-      <a class="back" href="{{ url_for('index') }}">← Labs</a>
-      <h1>{{ lab_title }}</h1>
-      <p class="sub">Availability · Next two weeks · Monday–Friday · 08:00–16:00</p>
-
-      <nav class="tabs">
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{ lab_title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head><body>
+<header class="topbar"><div class="container">
+<a class="back" href="{{ url_for('index') }}">← Labs</a>
+<h1>{{ lab_title }}</h1>
+<p class="sub">Availability · Next two weeks · Monday–Friday · 08:00–16:00</p>
+<nav class="tabs">
+  {% if lab_slug == 'furnace' %}<a class="tab" href="{{ url_for('furnace') }}">Booking</a>{% endif %}
+  {% if lab_slug == 'xps' %}<a class="tab" href="{{ url_for('xps') }}">Booking</a>{% endif %}
+  <a class="tab active" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Availability</a>
+</nav>
+</div></header>
+<main class="container">
+<div class="card">
+  <div class="legend"><span class="dot free"></span> Available (click to prefill booking) <span class="dot booked"></span> Booked</div>
+  {% for day in days %}
+    <h3 class="day-title">{{ day.date.strftime("%A, %d %b %Y") }}</h3>
+    <div class="slot-grid">
+    {% for s in day.slots %}
+      {% if s.free %}
         {% if lab_slug == 'furnace' %}
-          <a class="tab" href="{{ url_for('furnace') }}">Booking</a>
-        {% elif lab_slug == 'xps' %}
-          <a class="tab" href="{{ url_for('xps') }}">Booking</a>
+          <a class="slot slot-link free" href="{{ url_for('furnace') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
+        {% else %}
+          <a class="slot slot-link free" href="{{ url_for('xps') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
         {% endif %}
-        <a class="tab active" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Availability</a>
-      </nav>
+            <div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Available</div>
+          </a>
+      {% else %}
+        <div class="slot booked"><div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Booked</div></div>
+      {% endif %}
+    {% endfor %}
     </div>
-  </header>
-
-  <main class="container">
-    <div class="card">
-      <div class="legend">
-        <span class="dot free"></span> Available (click to prefill booking)
-        <span class="dot booked"></span> Booked
-      </div>
-
-      {% for day in days %}
-        <h3 class="day-title">{{ day.date.strftime("%A, %d %b %Y") }}</h3>
-        <div class="slot-grid">
-          {% for s in day.slots %}
-            {% if s.free %}
-              {% if lab_slug == 'furnace' %}
-                <a class="slot slot-link free" href="{{ url_for('furnace') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
-              {% else %}
-                <a class="slot slot-link free" href="{{ url_for('xps') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
-              {% endif %}
-                  <div class="slot-time">{{ s.start }}–{{ s.end }}</div>
-                  <div class="slot-state">Available</div>
-                </a>
-            {% else %}
-              <div class="slot booked">
-                <div class="slot-time">{{ s.start }}–{{ s.end }}</div>
-                <div class="slot-state">Booked</div>
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      {% endfor %}
-    </div>
-  </main>
-</body>
-</html>
+  {% endfor %}
+</div>
+</main></body></html>
