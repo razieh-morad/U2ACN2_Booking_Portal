@@ -1,4 +1,4 @@
-# Nanolab Booking Portal (v2)
+# U2ACN2/MRD Booking Portal (v2)
 
 Changes:
 - Added XPS booking page + availability
