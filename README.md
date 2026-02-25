@@ -81,11 +81,9 @@ Built with **Flask + Neon (Postgres) + Render** so students can book lab time on
 - By default, slots follow `SLOT_MINUTES` (commonly 60 minutes).
 
 ### Furnace slot logic (if enabled in your latest code)
-Some versions configure Furnace to use only **two blocks per day**:
+Only **two blocks per day**:
 - 08:00–12:00
 - 12:00–16:00
-
-If your app is configured this way, Furnace manual bookings must match these blocks exactly.
 
 ---
 
