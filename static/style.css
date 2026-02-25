@@ -59,3 +59,5 @@ button, .actions a { padding:10px 14px; border-radius:12px; border:1px solid rgb
 .slot-select { cursor:pointer; display:flex; gap:10px; align-items:flex-start; }
 .slot-select input { width:auto; margin:2px 0 0 0; transform: scale(1.15); }
 .section { margin-top:18px; }
+
+.danger { border-color: rgba(255,107,107,0.65) !important; background: rgba(255,107,107,0.14) !important; }

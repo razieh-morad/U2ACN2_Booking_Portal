@@ -33,3 +33,10 @@ Users and admins can select multiple available slots (next 2 weeks). Each slot i
 
 ## Health check
 Use /health for Render Health Check Path and for external pings.
+
+## Furnace slots
+- Furnace uses two fixed daily slots: 08:00–12:00 and 12:00–16:00.
+- Other labs continue to use hourly slots (SLOT_MINUTES).
+
+## Admin delete
+- Admin edit page includes a Delete booking action (optional user notification by email).

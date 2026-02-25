@@ -251,8 +251,14 @@ def iter_workdays(start_d: date, end_d: date):
             yield d
         d += timedelta(days=1)
 
-def build_slots_for_day(d: date) -> List[Tuple[time, time]]:
-    slots = []
+def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
+    # Lab-specific slot structure:
+    # - Furnace: two fixed blocks (08:00–12:00 and 12:00–16:00)
+    # - Others: default SLOT_MINUTES slots between WORKDAY_START and WORKDAY_END
+    if lab_slug == "furnace":
+        return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
+
+    slots: List[Tuple[time, time]] = []
     cur = datetime.combine(d, WORKDAY_START)
     end = datetime.combine(d, WORKDAY_END)
     while cur < end:
@@ -392,7 +398,7 @@ def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
     days: List[Dict[str, Any]] = []
     for d in iter_workdays(start_d, end_d):
         slots = []
-        for s, e in build_slots_for_day(d):
+        for s, e in build_slots_for_day(d, lab_slug):
             free = is_slot_free(bookings, d, s, e)
             slots.append({
                 "date": d.isoformat(),
@@ -674,6 +680,23 @@ def db_update_booking_time(booking_id: int, new_date: str, new_start: str, new_e
         conn.close()
 
 
+def db_delete_booking(booking_id: int) -> None:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bookings WHERE id=%s", (booking_id,))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        conn.commit()
+        conn.close()
+
+
 # ---------------- Slot selection ----------------
 def collect_selected_slots() -> List[Tuple[str, str, str]]:
     slots: List[Tuple[str, str, str]] = []
@@ -686,6 +709,11 @@ def collect_selected_slots() -> List[Tuple[str, str, str]]:
             slots.append((d, s, e))
     return sorted(list({x for x in slots}))
 
+
+
+def is_valid_furnace_block(start_hhmm: str, end_hhmm: str) -> bool:
+    """Furnace allows only two blocks: 08:00–12:00 and 12:00–16:00."""
+    return (start_hhmm, end_hhmm) in (("08:00", "12:00"), ("12:00", "16:00"))
 
 # ---------------- Routes ----------------
 @app.get("/health")
@@ -757,6 +785,9 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
 
     if selected_slots:
         for d, s, e in selected_slots:
+            if kind == "furnace" and not is_valid_furnace_block(s, e):
+                errors.append(f"Invalid furnace slot: {s}–{e}. Please choose 08:00–12:00 or 12:00–16:00.")
+                continue
             if has_conflict(lab_slug, d, s, e):
                 errors.append(f"Conflict: {d} {s}–{e} is already booked.")
     else:
@@ -768,6 +799,8 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
             errors.append("Please choose valid start/end times.")
         elif et <= st:
             errors.append("End time must be after start time.")
+        if not errors and kind == "furnace" and not is_valid_furnace_block(start_time, end_time):
+            errors.append("Furnace booking must be either 08:00–12:00 or 12:00–16:00.")
         if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
             errors.append("Time conflict: this slot overlaps an existing booking.")
 
@@ -888,6 +921,9 @@ def admin_reserve_slots(lab_slug: str):
     errors: List[str] = []
     if selected_slots:
         for d, s, e in selected_slots:
+            if lab_slug == "furnace" and not is_valid_furnace_block(s, e):
+                errors.append(f"Invalid furnace slot: {s}–{e}. Please choose 08:00–12:00 or 12:00–16:00.")
+                continue
             if has_conflict(lab_slug, d, s, e):
                 errors.append(f"Conflict: {d} {s}–{e} is already booked.")
     else:
@@ -899,6 +935,8 @@ def admin_reserve_slots(lab_slug: str):
             errors.append("Please choose valid start/end times.")
         elif et <= st:
             errors.append("End time must be after start time.")
+        if not errors and lab_slug == "furnace" and not is_valid_furnace_block(start_time, end_time):
+            errors.append("Furnace booking must be either 08:00–12:00 or 12:00–16:00.")
         if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
             errors.append("Time conflict: this slot overlaps an existing booking.")
 
@@ -1014,6 +1052,43 @@ def admin_update_booking(lab_slug: str, booking_id: int):
         flash(f"Booking updated, but email sending failed: {e}", "error")
 
     return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+@app.post("/admin/<lab_slug>/delete/<int:booking_id>")
+def admin_delete_booking(lab_slug: str, booking_id: int):
+    if lab_slug not in LABS:
+        abort(404)
+    guard = require_admin(lab_slug)
+    if guard is not None:
+        return guard
+
+    b = db_get_booking(booking_id)
+    if not b or b.get("lab_slug") != lab_slug:
+        flash("Booking not found.", "error")
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+    db_delete_booking(booking_id)
+
+    try:
+        subject = f"Booking cancelled: {LABS[lab_slug]['title']}"
+        old = f"{b.get('booking_date')} {str(b.get('start_time'))[:5]}–{str(b.get('end_time'))[:5]}"
+        body = (
+            f"Hello {b.get('user_name')},\n\n"
+            f"Your booking for {LABS[lab_slug]['title']} has been cancelled by the lab administrator.\n\n"
+            f"Cancelled slot: {old}\n\n"
+            f"If you have questions, reply to this email.\n\n"
+            f"Regards,\n"
+            f"{SMTP_FROM_NAME}\n"
+        )
+        if smtp_ready_for_lab(lab_slug):
+            send_email_for_lab(lab_slug, b.get("user_email", ""), subject, body)
+            flash("Booking deleted and user notified by email.", "ok")
+        else:
+            flash("Booking deleted. SMTP not configured for this lab, so no email was sent.", "ok")
+    except Exception as e:
+        flash(f"Booking deleted, but email sending failed: {e}", "error")
+
+    return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
 
 # ---- Export ----
 def export_rows(lab_slug: str) -> List[Dict[str, Any]]:

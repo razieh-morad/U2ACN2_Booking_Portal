@@ -50,6 +50,14 @@
       </div>
     </form>
 
+    <form class="card" method="post" action="{{ url_for('admin_delete_booking', lab_slug=lab_slug, booking_id=b.id) }}" onsubmit="return confirm('Delete this booking? This cannot be undone.');">
+      <h2>Delete booking</h2>
+      <p class="hint">This removes the booking from the database. If SMTP is configured, the user will be notified.</p>
+      <div class="actions">
+        <button type="submit" class="danger">Delete booking</button>
+      </div>
+    </form>
+
     <div class="card">
       <h2>Availability (next two weeks)</h2>
       <p class="hint">Use this to pick a free slot, then enter it above.</p>
