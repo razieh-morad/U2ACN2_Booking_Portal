@@ -766,21 +766,44 @@ def index():
 @app.get("/admin")
 def admin_portal():
     """
-    Admin hub page (no login here): it lists each lab and links to the per-lab admin timetable.
+    Admin hub page: lists each lab and links to the per-lab admin timetable.
     Each per-lab admin page still requires that lab’s credentials.
     """
-    order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
-    labs = []
-    for k in order:
-        labs.append({
-            "title": LABS[k]["title"],
-            "slug": k,
-            "subtitle": LABS[k]["subtitle"],
-            "admin_url": url_for("admin_lab", lab_slug=k),
-            "availability_url": url_for("lab_availability", lab_slug=k),
-            "booking_url": booking_url_for(k),
-        })
-    return render_template("admin_portal.html", labs=labs)
+    order = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
+    items = []
+    for slug in order:
+        items.append(
+            f"""
+            <li style="margin:10px 0;">
+              <strong>{LABS[slug]["title"]}</strong><br/>
+              <a href="{url_for('admin_lab', lab_slug=slug)}">Open admin timetable</a>
+              &nbsp;·&nbsp;
+              <a href="{url_for('lab_availability', lab_slug=slug)}">Availability</a>
+              &nbsp;·&nbsp;
+              <a href="{booking_url_for(slug)}">Booking</a>
+            </li>
+            """
+        )
+
+    html = f"""
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <title>Admin Portal</title>
+    </head>
+    <body style="font-family:Arial, sans-serif; padding:20px;">
+      <h1>Admin Portal</h1>
+      <p>Select a lab to view/manage its bookings (login required per lab).</p>
+      <ul style="padding-left:18px;">
+        {''.join(items)}
+      </ul>
+      <p><a href="{url_for('index')}">← Back to homepage</a></p>
+    </body>
+    </html>
+    """
+    return html
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
