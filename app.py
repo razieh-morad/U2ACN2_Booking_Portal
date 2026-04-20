@@ -70,7 +70,6 @@ for _slug in LABS.keys():
     }
 
 # SMTP global host settings
-
 SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "y")
@@ -82,13 +81,12 @@ def _smtp_for_lab(lab_slug: str) -> Dict[str, Any]:
     Defaults:
       user/pass/from = that lab's admin email/password
     Optional overrides:
-      SMTP_FURNACE_USER / SMTP_FURNACE_PASSWORD / SMTP_FURNACE_FROM
-      SMTP_XPS_USER / SMTP_XPS_PASSWORD / SMTP_XPS_FROM
+      SMTP_<LABKEY>_USER / SMTP_<LABKEY>_PASSWORD / SMTP_<LABKEY>_FROM
     """
-    lab = lab_slug.upper()
-    user = os.environ.get(f"SMTP_{lab}_USER", "").strip() or ADMIN[lab_slug]["email"]
-    pw = os.environ.get(f"SMTP_{lab}_PASSWORD", "").strip() or ADMIN[lab_slug]["password"]
-    from_addr = os.environ.get(f"SMTP_{lab}_FROM", "").strip() or user
+    labkey = _env_slug(lab_slug)
+    user = os.environ.get(f"SMTP_{labkey}_USER", "").strip() or ADMIN[lab_slug]["email"]
+    pw = os.environ.get(f"SMTP_{labkey}_PASSWORD", "").strip() or ADMIN[lab_slug]["password"]
+    from_addr = os.environ.get(f"SMTP_{labkey}_FROM", "").strip() or user
     return {"host": SMTP_HOST, "port": SMTP_PORT, "tls": SMTP_USE_TLS, "user": user, "password": pw, "from": from_addr}
 
 
@@ -265,17 +263,18 @@ def iter_workdays(start_d: date, end_d: date):
         d += timedelta(days=1)
 
 def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
-    # Lab-specific slot structure:
-    # - Furnace: two fixed blocks (08:00–12:00 and 12:00–16:00)
-    # - Others: default SLOT_MINUTES slots between WORKDAY_START and WORKDAY_END
+    # Furnace: two fixed blocks (08:00–12:00 and 12:00–16:00)
     if lab_slug == "furnace":
         return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
 
+    # Others: default SLOT_MINUTES slots between WORKDAY_START and WORKDAY_END
     slots: List[Tuple[time, time]] = []
     cur = datetime.combine(d, WORKDAY_START)
     end = datetime.combine(d, WORKDAY_END)
     while cur < end:
         nxt = cur + timedelta(minutes=SLOT_MINUTES)
+        if nxt > end:
+            break
         slots.append((cur.time(), nxt.time()))
         cur = nxt
     return slots
@@ -432,7 +431,7 @@ def smtp_ready_for_lab(lab_slug: str) -> bool:
 def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) -> None:
     cfg = _smtp_for_lab(lab_slug)
     if not smtp_ready_for_lab(lab_slug):
-        raise RuntimeError("SMTP is not configured for this lab. Set SMTP_HOST and admin email/password (or SMTP_<LAB>_USER/PASSWORD).")
+        raise RuntimeError("SMTP is not configured for this lab. Set SMTP_HOST and admin email/password (or SMTP_<LABKEY>_USER/PASSWORD).")
 
     msg = EmailMessage()
     msg["From"] = f"{SMTP_FROM_NAME} <{cfg['from']}>"
@@ -501,6 +500,16 @@ def admin_login_lab(lab_slug: str):
 def admin_logout():
     session.clear()
     return redirect(url_for("index"))
+
+
+# ---------------- Booking URL helper (for availability clicks + homepage links) ----------------
+def booking_url_for(lab_slug: str, **params) -> str:
+    """Return the correct booking URL for a lab (furnace/xps have dedicated routes)."""
+    if lab_slug == "furnace":
+        return url_for("furnace", **params)
+    if lab_slug == "xps":
+        return url_for("xps", **params)
+    return url_for("lab_generic", lab_slug=lab_slug, **params)
 
 
 # ---------------- DB CRUD ----------------
@@ -692,7 +701,6 @@ def db_update_booking_time(booking_id: int, new_date: str, new_start: str, new_e
         conn.commit()
         conn.close()
 
-
 def db_delete_booking(booking_id: int) -> None:
     init_db()
     if USE_POSTGRES:
@@ -722,11 +730,10 @@ def collect_selected_slots() -> List[Tuple[str, str, str]]:
             slots.append((d, s, e))
     return sorted(list({x for x in slots}))
 
-
-
 def is_valid_furnace_block(start_hhmm: str, end_hhmm: str) -> bool:
     """Furnace allows only two blocks: 08:00–12:00 and 12:00–16:00."""
     return (start_hhmm, end_hhmm) in (("08:00", "12:00"), ("12:00", "16:00"))
+
 
 # ---------------- Routes ----------------
 @app.get("/health")
@@ -737,16 +744,74 @@ def health():
 def index():
     # Keep Furnace + XPS at the top, then the rest alphabetically
     order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
-    labs = [{"title": LABS[k]["title"], "slug": k, "subtitle": LABS[k]["subtitle"]} for k in order]
-    return render_template("index.html", labs=labs)
+    labs = []
+    for k in order:
+        labs.append({
+            "title": LABS[k]["title"],
+            "slug": k,
+            "subtitle": LABS[k]["subtitle"],
+            "booking_url": booking_url_for(k),
+            "availability_url": url_for("lab_availability", lab_slug=k),
+            "admin_url": url_for("admin_lab", lab_slug=k),
+        })
+    # Your index.html can show an Admin link using admin_portal_url
+    return render_template("index.html", labs=labs, admin_portal_url=url_for("admin_portal"))
+
+@app.get("/admin")
+def admin_portal():
+    """
+    Admin hub page (no login here): it lists each lab and links to the per-lab admin timetable.
+    Each per-lab admin page still requires that lab’s credentials.
+    """
+    order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
+    labs = []
+    for k in order:
+        labs.append({
+            "title": LABS[k]["title"],
+            "slug": k,
+            "subtitle": LABS[k]["subtitle"],
+            "admin_url": url_for("admin_lab", lab_slug=k),
+            "availability_url": url_for("lab_availability", lab_slug=k),
+            "booking_url": booking_url_for(k),
+        })
+    return render_template("admin_portal.html", labs=labs)
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
     days = availability_days(lab_slug)
-    return render_template("availability.html", lab_slug=lab_slug, lab_title=LABS[lab_slug]["title"], days=days)
+    # booking_url helps your availability.html link back to the right booking page
+    return render_template(
+        "availability.html",
+        lab_slug=lab_slug,
+        lab_title=LABS[lab_slug]["title"],
+        days=days,
+        booking_url=booking_url_for(lab_slug),
+    )
 
+@app.get("/labs/<lab_slug>/prefill")
+def prefill_booking(lab_slug: str):
+    """
+    Used by availability tables:
+    clicking a free slot should always go to the correct lab booking page (furnace/xps/generic)
+    with booking_date/start_time/end_time prefilled.
+    """
+    if lab_slug not in LABS:
+        abort(404)
+
+    booking_date = (request.args.get("booking_date") or "").strip()
+    start_time = (request.args.get("start_time") or "").strip()
+    end_time = (request.args.get("end_time") or "").strip()
+
+    return redirect(
+        booking_url_for(
+            lab_slug,
+            booking_date=booking_date,
+            start_time=start_time,
+            end_time=end_time,
+        )
+    )
 
 @app.route("/labs/<lab_slug>", methods=["GET", "POST"])
 def lab_generic(lab_slug: str):
@@ -771,7 +836,6 @@ def lab_generic(lab_slug: str):
     form = merge_prefill(default_booking_form(), request.args)
     days = availability_days(lab_slug)
     return render_template("lab_generic.html", lab=lab_info, form=form, days=days)
-
 
 def handle_generic_booking(lab_info: Dict[str, Any]):
     lab_slug = lab_info["slug"]
@@ -1241,6 +1305,7 @@ def admin_export_xlsx(lab_slug: str):
     resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     resp.headers["Content-Disposition"] = f'attachment; filename="{lab_slug}_bookings.xlsx"'
     return resp
+
 
 # --- bootstrap ---
 try:
