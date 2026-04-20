@@ -264,100 +264,21 @@ def iter_workdays(start_d: date, end_d: date):
             yield d
         d += timedelta(days=1)
 
-
-# ---------------- Slot Plans ----------------
-# You can override slot structure per lab using environment variables:
-#
-# 1) Fixed blocks (highest priority):
-#    LAB_<LAB_SLUG>_SLOT_BLOCKS="08:00-12:00,12:00-16:00"
-#
-# 2) Slot minutes:
-#    LAB_<LAB_SLUG>_SLOT_MINUTES="120"
-#
-# <LAB_SLUG> is the lab slug uppercased with hyphens replaced by underscores, e.g.:
-#   manual-drying-oven -> MANUAL_DRYING_OVEN
-#
-DEFAULT_SLOT_MINUTES_BY_LAB: Dict[str, int] = {
-    "xps": 60,
-    "manual-drying-oven": 240,
-    "automated-drying-oven": 240,
-    "sputtering": 120,
-    "auto-lab": 120,
-    "uv-vis-currie-500": 60,
-    "centrifuge": 60,
-    "pelletizer": 120,
-    "thermal-conductivity-system": 240,
-    "freeze-dryer": 240,
-    "spin-coater": 60,
-}
-
-DEFAULT_SLOT_BLOCKS_BY_LAB: Dict[str, List[Tuple[str, str]]] = {
-    "furnace": [("08:00", "12:00"), ("12:00", "16:00")],
-}
-
-def _parse_blocks(spec: str) -> List[Tuple[time, time]]:
-    blocks: List[Tuple[time, time]] = []
-    for part in (spec or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if "-" not in part:
-            continue
-        a, b = [x.strip() for x in part.split("-", 1)]
-        st = parse_time(a)
-        et = parse_time(b)
-        if not st or not et:
-            continue
-        if et <= st:
-            continue
-        blocks.append((st, et))
-    return blocks
-
-def slot_plan_for_lab(lab_slug: str, d: date) -> List[Tuple[time, time]]:
-    """Return the list of allowed booking blocks for a given lab on a given day."""
-    key = _env_slug(lab_slug)
-    env_blocks = os.environ.get(f"LAB_{key}_SLOT_BLOCKS", "").strip()
-    if env_blocks:
-        blocks = _parse_blocks(env_blocks)
-        if blocks:
-            return blocks
-
-    if lab_slug in DEFAULT_SLOT_BLOCKS_BY_LAB:
-        blocks = [(parse_time(a), parse_time(b)) for a, b in DEFAULT_SLOT_BLOCKS_BY_LAB[lab_slug]]
-        return [(a, b) for a, b in blocks if a and b]
-
-    minutes = DEFAULT_SLOT_MINUTES_BY_LAB.get(lab_slug, SLOT_MINUTES)
-    env_minutes = os.environ.get(f"LAB_{key}_SLOT_MINUTES", "").strip()
-    if env_minutes:
-        try:
-            minutes = max(15, int(env_minutes))
-        except Exception:
-            pass
+def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
+    # Lab-specific slot structure:
+    # - Furnace: two fixed blocks (08:00–12:00 and 12:00–16:00)
+    # - Others: default SLOT_MINUTES slots between WORKDAY_START and WORKDAY_END
+    if lab_slug == "furnace":
+        return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
 
     slots: List[Tuple[time, time]] = []
     cur = datetime.combine(d, WORKDAY_START)
     end = datetime.combine(d, WORKDAY_END)
     while cur < end:
-        nxt = cur + timedelta(minutes=minutes)
-        if nxt > end:
-            break
+        nxt = cur + timedelta(minutes=SLOT_MINUTES)
         slots.append((cur.time(), nxt.time()))
         cur = nxt
     return slots
-
-def is_valid_slot_for_lab(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: str) -> bool:
-    d = parse_date(booking_date)
-    st = parse_time(start_hhmm)
-    et = parse_time(end_hhmm)
-    if not d or not st or not et:
-        return False
-    for a, b in slot_plan_for_lab(lab_slug, d):
-        if st == a and et == b:
-            return True
-    return False
-
-def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
-    return slot_plan_for_lab(lab_slug, d)
 
 def next_two_weeks_window() -> Tuple[date, date]:
     today = datetime.now(TZ).date()
@@ -517,8 +438,7 @@ def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) ->
     msg["From"] = f"{SMTP_FROM_NAME} <{cfg['from']}>"
     msg["To"] = to_email
     msg["Subject"] = subject
-    reply_to = (ADMIN.get(lab_slug, {}).get("email") or "").strip() or cfg["from"]
-    msg["Reply-To"] = reply_to
+    msg["Reply-To"] = ADMIN[lab_slug]["email"]
     msg.set_content(body)
 
     if cfg["tls"]:
@@ -537,103 +457,288 @@ def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) ->
 
 # ---------------- Admin auth (per lab) ----------------
 def _require_admin_vars(lab_slug: str):
-    if not ADMIN.get(lab_slug, {}).get("email") or not ADMIN.get(lab_slug, {}).get("password"):
+    if not ADMIN[lab_slug]["email"] or not ADMIN[lab_slug]["password"]:
         abort(404, description=f"Admin not configured for {lab_slug}. Set ADMIN_{_env_slug(lab_slug)}_EMAIL and ADMIN_{_env_slug(lab_slug)}_PASSWORD.")
 
-PORTAL_ADMIN_CREDENTIALS = os.environ.get("PORTAL_ADMIN_CREDENTIALS", "").strip()
-
-def _parse_portal_admins(spec: str) -> Dict[str, str]:
-    """
-    Format:
-      PORTAL_ADMIN_CREDENTIALS="email1:password1,email2:password2"
-    """
-    out: Dict[str, str] = {}
-    for item in (spec or "").split(","):
-        item = item.strip()
-        if not item or ":" not in item:
-            continue
-        email, pw = item.split(":", 1)
-        email = email.strip()
-        pw = pw.strip()
-        if email and pw:
-            out[email.lower()] = pw
-    return out
-
-PORTAL_ADMINS = _parse_portal_admins(PORTAL_ADMIN_CREDENTIALS)
-
-def is_logged_in_admin() -> bool:
-    return session.get("is_admin") is True and bool(session.get("admin_email"))
-
-def is_super_admin() -> bool:
-    return is_logged_in_admin() and session.get("admin_role") == "super"
-
 def is_admin_for(lab_slug: str) -> bool:
-    if not is_logged_in_admin():
-        return False
-    if is_super_admin():
-        return True
-    return session.get("admin_role") == "lab" and session.get("admin_lab") == lab_slug
+    return session.get("is_admin") is True and session.get("admin_lab") == lab_slug
 
 def require_admin(lab_slug: str):
+    _require_admin_vars(lab_slug)
     if not is_admin_for(lab_slug):
-        return redirect(url_for("admin_login", next=request.path, lab=lab_slug))
+        return redirect(url_for("admin_login_lab", lab_slug=lab_slug, next=request.path))
     return None
 
-@app.route("/admin/<lab_slug>/login", methods=["GET"])
+@app.route("/admin/<lab_slug>/login", methods=["GET", "POST"])
 def admin_login_lab(lab_slug: str):
     if lab_slug not in LABS:
         abort(404)
-    return redirect(url_for("admin_login", next=url_for("admin_lab", lab_slug=lab_slug), lab=lab_slug))
+    _require_admin_vars(lab_slug)
 
-
-@app.route("/admin", methods=["GET"])
-def admin_home():
-    if not is_logged_in_admin():
-        return redirect(url_for("admin_login", next=url_for("admin_home")))
-    if session.get("admin_role") == "lab":
-        return redirect(url_for("admin_lab", lab_slug=session.get("admin_lab")))
-    labs = [{"slug": k, "title": LABS[k]["title"], "subtitle": LABS[k]["subtitle"]} for k in LABS.keys()]
-    labs_sorted = sorted(labs, key=lambda x: (0 if x["slug"] in ("furnace", "xps") else 1, x["title"].lower()))
-    return render_template("admin_portal.html", labs=labs_sorted, admin_email=session.get("admin_email"))
-
-@app.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    lab_hint = (request.args.get("lab") or "").strip()
     if request.method == "POST":
         user = (request.form.get("username") or "").strip()
         pw = (request.form.get("password") or "").strip()
-        nxt = request.form.get("next") or url_for("admin_home")
 
-        # 1) Portal/super admins
-        if user.lower() in PORTAL_ADMINS and hmac.compare_digest(pw, PORTAL_ADMINS[user.lower()]):
+        if hmac.compare_digest(user.lower(), ADMIN[lab_slug]["email"].lower()) and hmac.compare_digest(pw, ADMIN[lab_slug]["password"]):
             session.clear()
             session["is_admin"] = True
-            session["admin_role"] = "super"
-            session["admin_email"] = user
+            session["admin_lab"] = lab_slug
+            session["admin_email"] = ADMIN[lab_slug]["email"]
+            nxt = request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug)
             return redirect(nxt)
-
-        # 2) Lab admins
-        for slug, creds in ADMIN.items():
-            if not creds.get("email") or not creds.get("password"):
-                continue
-            if hmac.compare_digest(user.lower(), creds["email"].lower()) and hmac.compare_digest(pw, creds["password"]):
-                session.clear()
-                session["is_admin"] = True
-                session["admin_role"] = "lab"
-                session["admin_lab"] = slug
-                session["admin_email"] = creds["email"]
-                return redirect(nxt)
 
         flash("Invalid credentials.", "error")
 
     return render_template(
         "admin_login.html",
-        lab_slug=lab_hint,
-        lab_title=LABS.get(lab_hint, {}).get("title", "Admin login") if lab_hint else "Admin login",
-        admin_email_hint="",
-        next=request.args.get("next") or url_for("admin_home"),
-        show_portal_hint=True,
+        lab_slug=lab_slug,
+        lab_title=LABS[lab_slug]["title"],
+        admin_email_hint=ADMIN[lab_slug]["email"],
+        next=request.args.get("next") or url_for("admin_lab", lab_slug=lab_slug),
     )
+
+@app.get("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
+# ---------------- DB CRUD ----------------
+def _row_to_dict_pg(row: Any, cols: List[str]) -> Dict[str, Any]:
+    d = dict(zip(cols, row))
+    out: Dict[str, Any] = {}
+    for k, v in d.items():
+        if isinstance(v, (date, time)):
+            out[k] = v.isoformat()
+        elif isinstance(v, bool):
+            out[k] = "Yes" if v else "No"
+        elif v is None:
+            out[k] = ""
+        else:
+            out[k] = str(v)
+    return out
+
+def db_list_bookings(lab_slug: str) -> List[Dict[str, Any]]:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM bookings WHERE lab_slug=%s ORDER BY booking_date DESC, start_time DESC", (lab_slug,))
+                cols = [d.name for d in cur.description]
+                return [_row_to_dict_pg(r, cols) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM bookings WHERE lab_slug=? ORDER BY booking_date DESC, start_time DESC", (lab_slug,)).fetchall()
+        conn.close()
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            for k, v in list(d.items()):
+                if k in ("vacuum", "charge_neutralizer"):
+                    d[k] = "Yes" if int(v or 0) == 1 else "No"
+                elif v is None:
+                    d[k] = ""
+                else:
+                    d[k] = str(v)
+            out.append(d)
+        return out
+
+def db_get_booking(booking_id: int) -> Optional[Dict[str, Any]]:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM bookings WHERE id=%s", (booking_id,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                cols = [d.name for d in cur.description]
+                return _row_to_dict_pg(row, cols)
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        for k, v in list(d.items()):
+            if k in ("vacuum", "charge_neutralizer"):
+                d[k] = "Yes" if int(v or 0) == 1 else "No"
+            elif v is None:
+                d[k] = ""
+            else:
+                d[k] = str(v)
+        return d
+
+def db_insert_booking(payload: Dict[str, Any]) -> int:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bookings (
+                        lab_slug, booking_group_id, user_name, user_email,
+                        nanomaterial_type, melting_point, material_density,
+                        anneal_temp_c, anneal_time_h, gas_type, pressure, vacuum,
+                        sample_name, sample_count, elements_of_interest, analysis_type,
+                        charge_neutralizer, mounting_method, outgassing_risk,
+                        notes,
+                        booking_date, start_time, end_time,
+                        updated_at, updated_by
+                    ) VALUES (
+                        %s,%s,%s,%s,
+                        %s,%s,%s,
+                        %s,%s,%s,%s,%s,
+                        %s,%s,%s,%s,
+                        %s,%s,%s,
+                        %s,
+                        %s::date,%s::time,%s::time,
+                        %s,%s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        payload["lab_slug"], payload.get("booking_group_id"), payload["user_name"], payload["user_email"],
+                        payload.get("nanomaterial_type"), payload.get("melting_point"), payload.get("material_density"),
+                        payload.get("anneal_temp_c"), payload.get("anneal_time_h"), payload.get("gas_type"),
+                        payload.get("pressure"), bool(payload.get("vacuum")),
+                        payload.get("sample_name"), payload.get("sample_count"), payload.get("elements_of_interest"),
+                        payload.get("analysis_type"), bool(payload.get("charge_neutralizer")),
+                        payload.get("mounting_method"), payload.get("outgassing_risk"),
+                        payload.get("notes"),
+                        payload["booking_date"], payload["start_time"], payload["end_time"],
+                        payload.get("updated_at"), payload.get("updated_by"),
+                    ),
+                )
+                booking_id = cur.fetchone()[0]
+            conn.commit()
+            return int(booking_id)
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO bookings (
+                lab_slug, booking_group_id, user_name, user_email,
+                nanomaterial_type, melting_point, material_density,
+                anneal_temp_c, anneal_time_h, gas_type, pressure, vacuum,
+                sample_name, sample_count, elements_of_interest, analysis_type,
+                charge_neutralizer, mounting_method, outgassing_risk,
+                notes,
+                booking_date, start_time, end_time,
+                created_at, updated_at, updated_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                payload["lab_slug"], payload.get("booking_group_id"), payload["user_name"], payload["user_email"],
+                payload.get("nanomaterial_type"), payload.get("melting_point"), payload.get("material_density"),
+                payload.get("anneal_temp_c"), payload.get("anneal_time_h"), payload.get("gas_type"),
+                payload.get("pressure"), 1 if payload.get("vacuum") else 0,
+                payload.get("sample_name"), payload.get("sample_count"), payload.get("elements_of_interest"),
+                payload.get("analysis_type"), 1 if payload.get("charge_neutralizer") else 0,
+                payload.get("mounting_method"), payload.get("outgassing_risk"),
+                payload.get("notes"),
+                payload["booking_date"], payload["start_time"], payload["end_time"],
+                datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                payload.get("updated_at"), payload.get("updated_by"),
+            ),
+        )
+        conn.commit()
+        booking_id = cur.lastrowid
+        conn.close()
+        return int(booking_id)
+
+def db_update_booking_time(booking_id: int, new_date: str, new_start: str, new_end: str, updated_by: str) -> None:
+    init_db()
+    now_iso = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bookings
+                    SET booking_date=%s::date, start_time=%s::time, end_time=%s::time,
+                        updated_at=NOW(), updated_by=%s
+                    WHERE id=%s
+                    """,
+                    (new_date, new_start, new_end, updated_by, booking_id),
+                )
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute(
+            """
+            UPDATE bookings
+            SET booking_date=?, start_time=?, end_time=?, updated_at=?, updated_by=?
+            WHERE id=?
+            """,
+            (new_date, new_start, new_end, now_iso, updated_by, booking_id),
+        )
+        conn.commit()
+        conn.close()
+
+
+def db_delete_booking(booking_id: int) -> None:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bookings WHERE id=%s", (booking_id,))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        conn.commit()
+        conn.close()
+
+
+# ---------------- Slot selection ----------------
+def collect_selected_slots() -> List[Tuple[str, str, str]]:
+    slots: List[Tuple[str, str, str]] = []
+    for v in request.form.getlist("slot"):
+        parts = (v or "").split("|")
+        if len(parts) != 3:
+            continue
+        d, s, e = parts
+        if parse_date(d) and parse_time(s) and parse_time(e):
+            slots.append((d, s, e))
+    return sorted(list({x for x in slots}))
+
+
+
+def is_valid_furnace_block(start_hhmm: str, end_hhmm: str) -> bool:
+    """Furnace allows only two blocks: 08:00–12:00 and 12:00–16:00."""
+    return (start_hhmm, end_hhmm) in (("08:00", "12:00"), ("12:00", "16:00"))
+
+# ---------------- Routes ----------------
+@app.get("/health")
+def health():
+    return {"status": "ok"}, 200
+
+@app.route("/")
+def index():
+    # Keep Furnace + XPS at the top, then the rest alphabetically
+    order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
+    labs = [{"title": LABS[k]["title"], "slug": k, "subtitle": LABS[k]["subtitle"]} for k in order]
+    return render_template("index.html", labs=labs)
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
@@ -699,8 +804,6 @@ def handle_generic_booking(lab_info: Dict[str, Any]):
             errors.append("Please choose valid start/end times.")
         elif et <= st:
             errors.append("End time must be after start time.")
-        if not errors and not is_valid_slot_for_lab(lab_slug, booking_date, start_time, end_time):
-            errors.append("Please choose a valid slot from the availability table (slot blocks depend on the lab).")
         if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
             errors.append("Time conflict: this slot overlaps an existing booking.")
 
@@ -785,6 +888,9 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
 
     if selected_slots:
         for d, s, e in selected_slots:
+            if kind == "furnace" and not is_valid_furnace_block(s, e):
+                errors.append(f"Invalid furnace slot: {s}–{e}. Please choose 08:00–12:00 or 12:00–16:00.")
+                continue
             if has_conflict(lab_slug, d, s, e):
                 errors.append(f"Conflict: {d} {s}–{e} is already booked.")
     else:
@@ -796,6 +902,8 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
             errors.append("Please choose valid start/end times.")
         elif et <= st:
             errors.append("End time must be after start time.")
+        if not errors and kind == "furnace" and not is_valid_furnace_block(start_time, end_time):
+            errors.append("Furnace booking must be either 08:00–12:00 or 12:00–16:00.")
         if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
             errors.append("Time conflict: this slot overlaps an existing booking.")
 
@@ -916,6 +1024,9 @@ def admin_reserve_slots(lab_slug: str):
     errors: List[str] = []
     if selected_slots:
         for d, s, e in selected_slots:
+            if lab_slug == "furnace" and not is_valid_furnace_block(s, e):
+                errors.append(f"Invalid furnace slot: {s}–{e}. Please choose 08:00–12:00 or 12:00–16:00.")
+                continue
             if has_conflict(lab_slug, d, s, e):
                 errors.append(f"Conflict: {d} {s}–{e} is already booked.")
     else:
@@ -927,8 +1038,8 @@ def admin_reserve_slots(lab_slug: str):
             errors.append("Please choose valid start/end times.")
         elif et <= st:
             errors.append("End time must be after start time.")
-        if not errors and not is_valid_slot_for_lab(lab_slug, booking_date, start_time, end_time):
-            errors.append("Please choose a valid slot from the availability table (slot blocks depend on the lab).")
+        if not errors and lab_slug == "furnace" and not is_valid_furnace_block(start_time, end_time):
+            errors.append("Furnace booking must be either 08:00–12:00 or 12:00–16:00.")
         if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
             errors.append("Time conflict: this slot overlaps an existing booking.")
 
@@ -1010,8 +1121,6 @@ def admin_update_booking(lab_slug: str, booking_id: int):
         errors.append("Please choose valid start/end times.")
     elif et <= st:
         errors.append("End time must be after start time.")
-    if not errors and not is_valid_slot_for_lab(lab_slug, new_date, new_start, new_end):
-        errors.append("Please choose a valid slot block for this lab.")
     if not errors and has_conflict(lab_slug, new_date, new_start, new_end, exclude_id=booking_id):
         errors.append("Time conflict: this slot overlaps an existing booking.")
 
