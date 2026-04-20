@@ -24,7 +24,5 @@ services:
         sync: false
       - key: SMTP_PORT
         value: '587'
-      - key: PORTAL_ADMIN_CREDENTIALS
-        sync: false
       - key: SMTP_USE_TLS
         value: 'true'
