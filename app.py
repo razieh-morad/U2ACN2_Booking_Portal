@@ -742,21 +742,27 @@ def health():
 
 @app.route("/")
 def index():
-    # Keep Furnace + XPS at the top, then the rest alphabetically
-    order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
-    labs = []
-    for k in order:
-        labs.append({
-            "title": LABS[k]["title"],
-            "slug": k,
-            "subtitle": LABS[k]["subtitle"],
-            "booking_url": booking_url_for(k),
-            "availability_url": url_for("lab_availability", lab_slug=k),
-            "admin_url": url_for("admin_lab", lab_slug=k),
-        })
-    # Your index.html can show an Admin link using admin_portal_url
-    return render_template("index.html", labs=labs, admin_portal_url=url_for("admin_portal"))
+    labs = sorted(
+        [
+            {
+                "title": LABS[k]["title"],
+                "slug": k,
+                "subtitle": LABS[k]["subtitle"],
+                "booking_url": booking_url_for(k),
+                "availability_url": url_for("lab_availability", lab_slug=k),
+                "admin_url": url_for("admin_lab", lab_slug=k),
+            }
+            for k in LABS.keys()
+        ],
+        key=lambda x: x["title"].lower(),
+    )
 
+    return render_template(
+        "index.html",
+        labs=labs,
+        admin_portal_url=url_for("admin_portal"),
+    )
+    
 @app.get("/admin")
 def admin_portal():
     """
