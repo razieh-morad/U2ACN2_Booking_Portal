@@ -19,23 +19,31 @@
       <h2>Labs</h2>
       <div class="grid">
         {% for lab in labs %}
-          {% if lab.slug == 'furnace' %}
-            <a class="lab" href="{{ url_for('furnace') }}">
-          {% elif lab.slug == 'xps' %}
-            <a class="lab" href="{{ url_for('xps') }}">
-          {% else %}
-            <a class="lab" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">
-          {% endif %}
-              <div class="lab-title">{{ lab.title }}</div>
-              <div class="lab-sub">{{ lab.subtitle }}</div>
-              <div class="lab-cta">Open →</div>
-            </a>
+          <a class="lab" href="{{ lab.booking_url }}">
+            <div class="lab-title">{{ lab.title }}</div>
+            <div class="lab-sub">{{ lab.subtitle }}</div>
+            <div class="lab-cta">Book →</div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Quick links</h2>
+      <div class="grid">
+        {% for lab in labs %}
+          <a class="lab" href="{{ lab.availability_url }}">
+            <div class="lab-title">{{ lab.title }}</div>
+            <div class="lab-sub">View availability</div>
+            <div class="lab-cta">Availability →</div>
+          </a>
         {% endfor %}
       </div>
     </div>
 
     <div class="hint">
-      Admin: go to <span class="muted">/admin/&lt;lab-slug&gt;</span> (each lab has its own login).
+      <a href="{{ admin_portal_url }}">Admin portal</a>
+      <span class="sub">· Choose a lab to view its timetable (login required per lab)</span>
     </div>
   </main>
 </body>
