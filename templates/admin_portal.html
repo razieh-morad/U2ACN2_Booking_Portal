@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>Admin Portal</h1>
+      <p class="sub">Logged in as {{ admin_email }}</p>
+      <nav class="tabs">
+        <a class="tab active" href="{{ url_for('admin_home') }}">Admin home</a>
+        <a class="tab" href="{{ url_for('admin_logout') }}">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>Lab admin pages</h2>
+      <p class="hint">Choose a lab to manage bookings, reserve slots, export data, edit or delete bookings.</p>
+      <div class="grid">
+        {% for lab in labs %}
+          <a class="lab" href="{{ url_for('admin_lab', lab_slug=lab.slug) }}">
+            <div class="lab-title">{{ lab.title }}</div>
+            <div class="lab-sub">{{ lab.subtitle }}</div>
+            <div class="lab-cta">Open admin →</div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </main>
+</body>
+</html>

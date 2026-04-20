@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin Login | {{ lab_title }}</title>
+  <title>Admin Login</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
@@ -11,7 +11,11 @@
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>Admin login</h1>
-      <p class="sub">{{ lab_title }}</p>
+      {% if lab_slug %}
+        <p class="sub">{{ lab_title }}</p>
+      {% else %}
+        <p class="sub">Portal admin or lab admin login</p>
+      {% endif %}
     </div>
   </header>
 
@@ -29,13 +33,20 @@
     <form class="card" method="post">
       <input type="hidden" name="next" value="{{ next }}" />
       <div class="row">
-        <label>Email<input name="username" type="email" placeholder="{{ admin_email_hint }}" autocomplete="username" /></label>
+        <label>Email<input name="username" type="email" placeholder="admin@example.com" autocomplete="username" /></label>
         <label>Password<input name="password" type="password" autocomplete="current-password" /></label>
       </div>
       <div class="actions">
         <button type="submit">Login</button>
         <a class="secondary" href="{{ url_for('index') }}">Cancel</a>
       </div>
+
+      {% if show_portal_hint %}
+        <p class="hint">
+          Portal admins: set <code>PORTAL_ADMIN_CREDENTIALS</code> as
+          <code>email1:password1,email2:password2</code> in Render env vars.
+        </p>
+      {% endif %}
     </form>
   </main>
 </body>

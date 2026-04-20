@@ -12,12 +12,18 @@
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab_title }}</h1>
       <p class="sub">Availability · Next two weeks · Monday–Friday · 08:00–16:00</p>
+
+      {% set booking_url = None %}
+      {% if lab_slug == 'furnace' %}
+        {% set booking_url = url_for('furnace') %}
+      {% elif lab_slug == 'xps' %}
+        {% set booking_url = url_for('xps') %}
+      {% else %}
+        {% set booking_url = url_for('lab_generic', lab_slug=lab_slug) %}
+      {% endif %}
+
       <nav class="tabs">
-        {% if lab_slug == 'furnace' %}
-          <a class="tab" href="{{ url_for('furnace') }}">Booking</a>
-        {% elif lab_slug == 'xps' %}
-          <a class="tab" href="{{ url_for('xps') }}">Booking</a>
-        {% endif %}
+        <a class="tab" href="{{ booking_url }}">Booking</a>
         <a class="tab active" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Availability</a>
       </nav>
     </div>
@@ -35,14 +41,10 @@
         <div class="slot-grid">
           {% for s in day.slots %}
             {% if s.free %}
-              {% if lab_slug == 'furnace' %}
-                <a class="slot slot-link free" href="{{ url_for('furnace') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
-              {% else %}
-                <a class="slot slot-link free" href="{{ url_for('xps') }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
-              {% endif %}
-                  <div class="slot-time">{{ s.start }}–{{ s.end }}</div>
-                  <div class="slot-state">Available</div>
-                </a>
+              <a class="slot slot-link free" href="{{ booking_url }}?booking_date={{ s.date }}&start_time={{ s.start }}&end_time={{ s.end }}">
+                <div class="slot-time">{{ s.start }}–{{ s.end }}</div>
+                <div class="slot-state">Available</div>
+              </a>
             {% else %}
               <div class="slot booked">
                 <div class="slot-time">{{ s.start }}–{{ s.end }}</div>
