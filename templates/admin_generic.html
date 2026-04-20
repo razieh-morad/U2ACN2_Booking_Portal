@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin | {{ lab_title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>{{ lab_title }}</h1>
+      <p class="sub">Admin: {{ admin_email }} · SMTP: {{ 'ready' if smtp_ready else 'not configured' }}</p>
+      <nav class="tabs">
+        <a class="tab" href="{{ url_for('lab_generic', lab_slug=lab_slug) }}">User booking</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Public availability</a>
+        <a class="tab active" href="{{ url_for('admin_lab', lab_slug=lab_slug) }}">Admin</a>
+        <a class="tab" href="{{ url_for('admin_logout') }}">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts">
+          {% for category, msg in messages %}
+            <div class="alert {{ category }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <h2>Export</h2>
+      <div class="actions">
+        <a class="secondary" href="{{ url_for('admin_export_csv', lab_slug=lab_slug) }}">Download CSV</a>
+        <a class="secondary" href="{{ url_for('admin_export_xlsx', lab_slug=lab_slug) }}">Download Excel</a>
+      </div>
+    </div>
+
+    <form class="card" method="post" action="{{ url_for('admin_reserve_slots', lab_slug=lab_slug) }}">
+      <h2>Admin quick booking: reserve slot(s)</h2>
+      <div class="row">
+        <label>Name (optional)<input name="user_name" placeholder="ADMIN RESERVED" /></label>
+        <label>Email (optional)<input name="user_email" placeholder="{{ admin_email }}" /></label>
+      </div>
+      <label>Notes<input name="notes" placeholder="Reserved / maintenance / VIP booking..." /></label>
+
+      <div class="card-inner">
+<div class="legend">
+          <span class="dot free"></span> Available (select one or more)
+          <span class="dot booked"></span> Booked
+      </div>
+
+      <h3 class="section">Or manual date/time (single slot)</h3>
+      <div class="row">
+        <label>Date<input name="booking_date" type="date" /></label>
+        <label>Start time<input name="start_time" type="time" /></label>
+        <label>End time<input name="end_time" type="time" /></label>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Reserve</button>
+      </div>
+    </form>
+
+    <div class="card">
+      <h2>Bookings</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th><th>Notes</th><th>Edit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td>{{ r.booking_date }}</td>
+              <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
+              <td>{{ r.user_name }}</td>
+              <td>{{ r.user_email }}</td>
+              <td class="wrap">{{ r.notes }}</td>
+              <td><a class="link" href="{{ url_for('admin_edit_booking', lab_slug=lab_slug, booking_id=r.id) }}">Edit</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="empty">No bookings yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ lab.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>{{ lab.title }}</h1>
+      <p class="sub">{{ lab.brand }}</p>
+      <nav class="tabs">
+        <a class="tab active" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">Booking</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab.slug) }}">Availability</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts">
+          {% for category, msg in messages %}
+            <div class="alert {{ category }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post" novalidate>
+      <h2>Your details</h2>
+      <div class="row">
+        <label>Your name *<input name="user_name" value="{{ form.get('user_name','') }}" required /></label>
+        <label>Email *<input name="user_email" type="email" value="{{ form.get('user_email','') }}" required /></label>
+      </div>
+
+      <h2>Choose slot(s)</h2>
+      <p class="hint">Select one or more available slots below. If selected, the manual date/time fields are ignored.</p>
+      <div class="card-inner">
+<div class="legend">
+          <span class="dot free"></span> Available (select one or more)
+          <span class="dot booked"></span> Booked
+      </div>
+
+      <h3 class="section">Or manual date/time (single slot)</h3>
+      <div class="row">
+        <label>Date<input name="booking_date" type="date" value="{{ form.get('booking_date','') }}" /></label>
+        <label>Start time<input name="start_time" type="time" value="{{ form.get('start_time','') }}" /></label>
+        <label>End time<input name="end_time" type="time" value="{{ form.get('end_time','') }}" /></label>
+      </div>
+
+      <label>Notes / request<textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea></label>
+
+      <div class="actions">
+        <button type="submit">Submit booking</button>
+        <a class="secondary" href="{{ url_for('lab_availability', lab_slug=lab.slug) }}">View availability</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

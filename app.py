@@ -43,21 +43,34 @@ _db_initialized = False
 LABS = {
     "furnace": {"title": "Nanomaterials Furnace (Carbonate Furnace)", "subtitle": "Carbonate Furnace"},
     "xps": {"title": "XPS (X-ray Photoelectron Spectroscopy)", "subtitle": "Surface chemical analysis"},
+
+    # New sections
+    "manual-drying-oven": {"title": "Manual drying oven", "subtitle": "Drying"},
+    "automated-drying-oven": {"title": "Automated drying oven", "subtitle": "Drying"},
+    "sputtering": {"title": "Sputtering", "subtitle": "Thin films / coatings"},
+    "auto-lab": {"title": "Auto lab", "subtitle": "Automated workflows"},
+    "uv-vis-currie-500": {"title": "UV-Vis Currie 500", "subtitle": "Optical spectroscopy"},
+    "centrifuge": {"title": "Centrifuge", "subtitle": "Sample separation"},
+    "pelletizer": {"title": "Pelletizer", "subtitle": "Pellet pressing"},
+    "thermal-conductivity-system": {"title": "Thermal conductivity system", "subtitle": "Thermal transport"},
+    "freeze-dryer": {"title": "Freeze dryer", "subtitle": "Lyophilization"},
+    "spin-coater": {"title": "Spin coater", "subtitle": "Thin film deposition"},
 }
 
 # Per-lab admins (email username + password)
-ADMIN = {
-    "furnace": {
-        "email": os.environ.get("ADMIN_FURNACE_EMAIL", "").strip(),
-        "password": os.environ.get("ADMIN_FURNACE_PASSWORD", "").strip(),
-    },
-    "xps": {
-        "email": os.environ.get("ADMIN_XPS_EMAIL", "").strip(),
-        "password": os.environ.get("ADMIN_XPS_PASSWORD", "").strip(),
-    },
-}
+def _env_slug(slug: str) -> str:
+    return slug.upper().replace("-", "_").replace(" ", "_")
+
+ADMIN: Dict[str, Dict[str, str]] = {}
+for _slug in LABS.keys():
+    key = _env_slug(_slug)
+    ADMIN[_slug] = {
+        "email": os.environ.get(f"ADMIN_{key}_EMAIL", "").strip(),
+        "password": os.environ.get(f"ADMIN_{key}_PASSWORD", "").strip(),
+    }
 
 # SMTP global host settings
+
 SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "y")
@@ -445,7 +458,7 @@ def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) ->
 # ---------------- Admin auth (per lab) ----------------
 def _require_admin_vars(lab_slug: str):
     if not ADMIN[lab_slug]["email"] or not ADMIN[lab_slug]["password"]:
-        abort(500, description=f"Missing ADMIN_{lab_slug.upper()}_EMAIL or ADMIN_{lab_slug.upper()}_PASSWORD.")
+        abort(404, description=f"Admin not configured for {lab_slug}. Set ADMIN_{_env_slug(lab_slug)}_EMAIL and ADMIN_{_env_slug(lab_slug)}_PASSWORD.")
 
 def is_admin_for(lab_slug: str) -> bool:
     return session.get("is_admin") is True and session.get("admin_lab") == lab_slug
@@ -722,10 +735,9 @@ def health():
 
 @app.route("/")
 def index():
-    labs = [
-        {"title": LABS["furnace"]["title"], "slug": "furnace", "subtitle": LABS["furnace"]["subtitle"]},
-        {"title": LABS["xps"]["title"], "slug": "xps", "subtitle": LABS["xps"]["subtitle"]},
-    ]
+    # Keep Furnace + XPS at the top, then the rest alphabetically
+    order = ["furnace", "xps"] + sorted([k for k in LABS.keys() if k not in ("furnace", "xps")])
+    labs = [{"title": LABS[k]["title"], "slug": k, "subtitle": LABS[k]["subtitle"]} for k in order]
     return render_template("index.html", labs=labs)
 
 @app.route("/labs/<lab_slug>/availability")
@@ -734,6 +746,97 @@ def lab_availability(lab_slug: str):
         abort(404)
     days = availability_days(lab_slug)
     return render_template("availability.html", lab_slug=lab_slug, lab_title=LABS[lab_slug]["title"], days=days)
+
+
+@app.route("/labs/<lab_slug>", methods=["GET", "POST"])
+def lab_generic(lab_slug: str):
+    # Furnace and XPS have dedicated pages
+    if lab_slug == "furnace":
+        return redirect(url_for("furnace"))
+    if lab_slug == "xps":
+        return redirect(url_for("xps"))
+    if lab_slug not in LABS:
+        abort(404)
+
+    lab_info = {
+        "brand": "iThemba Labs/U2ACN2",
+        "title": LABS[lab_slug]["title"],
+        "slug": lab_slug,
+        "administrators": [],
+    }
+
+    if request.method == "POST":
+        return handle_generic_booking(lab_info)
+
+    form = merge_prefill(default_booking_form(), request.args)
+    days = availability_days(lab_slug)
+    return render_template("lab_generic.html", lab=lab_info, form=form, days=days)
+
+
+def handle_generic_booking(lab_info: Dict[str, Any]):
+    lab_slug = lab_info["slug"]
+    user_name = (request.form.get("user_name") or "").strip()
+    user_email = (request.form.get("user_email") or "").strip()
+    selected_slots = collect_selected_slots()
+
+    booking_date = (request.form.get("booking_date") or "").strip()
+    start_time = (request.form.get("start_time") or "").strip()
+    end_time = (request.form.get("end_time") or "").strip()
+
+    notes = (request.form.get("notes") or "").strip()
+
+    errors: List[str] = []
+    if not user_name:
+        errors.append("Name is required.")
+    if not user_email or "@" not in user_email:
+        errors.append("A valid email is required.")
+
+    if selected_slots:
+        for d, s, e in selected_slots:
+            if has_conflict(lab_slug, d, s, e):
+                errors.append(f"Conflict: {d} {s}–{e} is already booked.")
+    else:
+        if not parse_date(booking_date):
+            errors.append("Please choose a valid date.")
+        st = parse_time(start_time)
+        et = parse_time(end_time)
+        if not st or not et:
+            errors.append("Please choose valid start/end times.")
+        elif et <= st:
+            errors.append("End time must be after start time.")
+        if not errors and has_conflict(lab_slug, booking_date, start_time, end_time):
+            errors.append("Time conflict: this slot overlaps an existing booking.")
+
+    if errors:
+        for e in errors:
+            flash(e, "error")
+        days = availability_days(lab_slug)
+        return render_template("lab_generic.html", lab=lab_info, form=request.form, days=days)
+
+    group_id = str(uuid.uuid4()) if selected_slots else None
+    created_ids: List[int] = []
+
+    base_payload = {
+        "lab_slug": lab_slug,
+        "booking_group_id": group_id,
+        "user_name": user_name,
+        "user_email": user_email,
+        "notes": notes,
+        "updated_at": None,
+        "updated_by": None,
+    }
+
+    if selected_slots:
+        for d, s, e in selected_slots:
+            payload = dict(base_payload)
+            payload.update({"booking_date": d, "start_time": s, "end_time": e})
+            created_ids.append(db_insert_booking(payload))
+    else:
+        payload = dict(base_payload)
+        payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time})
+        created_ids.append(db_insert_booking(payload))
+
+    return redirect(url_for("booking_success", booking_id=created_ids[-1]))
 
 @app.route("/labs/furnace", methods=["GET", "POST"])
 def furnace():
@@ -890,7 +993,7 @@ def admin_lab(lab_slug: str):
     days = availability_days(lab_slug)
     admin_email = session.get("admin_email", "")
 
-    template = "admin_furnace.html" if lab_slug == "furnace" else "admin_xps.html"
+    template = "admin_furnace.html" if lab_slug == "furnace" else ("admin_xps.html" if lab_slug == "xps" else "admin_generic.html")
     return render_template(
         template,
         lab_title=LABS[lab_slug]["title"],
