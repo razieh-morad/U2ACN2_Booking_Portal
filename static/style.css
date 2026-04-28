@@ -61,3 +61,18 @@ button, .actions a { padding:10px 14px; border-radius:12px; border:1px solid rgb
 .section { margin-top:18px; }
 
 .danger { border-color: rgba(255,107,107,0.65) !important; background: rgba(255,107,107,0.14) !important; }
+
+/* ---- Approval workflow ---- */
+.badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+.badge-pending  { background:rgba(255,193,7,0.15); border:1px solid rgba(255,193,7,0.55); color:#ffc107; }
+.badge-approved { background:rgba(87,211,158,0.12); border:1px solid rgba(87,211,158,0.5); color:var(--ok); }
+.badge-rejected { background:rgba(255,107,107,0.12); border:1px solid rgba(255,107,107,0.5); color:var(--danger); }
+
+.row-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.btn-approve { padding:5px 10px; border-radius:10px; border:1px solid rgba(87,211,158,0.55); background:rgba(87,211,158,0.12); color:var(--ok); font-weight:700; cursor:pointer; font-size:12px; }
+.btn-approve:hover { background:rgba(87,211,158,0.22); }
+.btn-reject  { padding:5px 10px; border-radius:10px; border:1px solid rgba(255,107,107,0.55); background:rgba(255,107,107,0.12); color:var(--danger); font-weight:700; cursor:pointer; font-size:12px; }
+.btn-reject:hover  { background:rgba(255,107,107,0.22); }
+.btn-del     { padding:5px 10px; border-radius:10px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--muted); font-weight:700; cursor:pointer; font-size:12px; }
+.btn-del:hover { color:var(--danger); border-color:rgba(255,107,107,0.4); }
+.row-pending td { background: rgba(255,193,7,0.04); }

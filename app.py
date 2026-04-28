@@ -125,6 +125,11 @@ PG_COLUMNS = {
     "created_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
     "updated_at": "TIMESTAMPTZ",
     "updated_by": "TEXT",
+
+    # Approval workflow
+    "status": "TEXT NOT NULL DEFAULT 'pending'",       # pending | approved | rejected
+    "approval_token": "TEXT",                           # UUID for one-click approve/reject links
+    "rejection_reason": "TEXT",
 }
 
 SQLITE_COLUMNS = {
@@ -159,17 +164,23 @@ SQLITE_COLUMNS = {
     "created_at": "TEXT NOT NULL",
     "updated_at": "TEXT",
     "updated_by": "TEXT",
+
+    # Approval workflow
+    "status": "TEXT NOT NULL DEFAULT 'pending'",
+    "approval_token": "TEXT",
+    "rejection_reason": "TEXT",
 }
 
 EXPORT_COLUMNS = [
     "id", "lab_slug", "booking_group_id",
     "user_name", "user_email",
     "booking_date", "start_time", "end_time",
+    "status",
     "nanomaterial_type", "melting_point", "material_density",
     "anneal_temp_c", "anneal_time_h", "gas_type", "pressure", "vacuum",
     "sample_name", "sample_count", "elements_of_interest", "analysis_type",
     "charge_neutralizer", "mounting_method", "outgassing_risk",
-    "notes", "created_at", "updated_at", "updated_by",
+    "notes", "rejection_reason", "created_at", "updated_at", "updated_by",
 ]
 
 
@@ -454,6 +465,70 @@ def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) ->
             s.send_message(msg)
 
 
+def notify_admin_new_booking(lab_slug: str, booking: Dict[str, Any], approve_url: str, reject_url: str) -> None:
+    """Email the lab admin when a new booking request arrives, with one-click approve/reject links."""
+    if not smtp_ready_for_lab(lab_slug):
+        return
+    lab_title = LABS[lab_slug]["title"]
+    slot = f"{booking['booking_date']}  {str(booking['start_time'])[:5]}–{str(booking['end_time'])[:5]}"
+    subject = f"[Action required] New booking request — {lab_title}"
+    body = (
+        f"A new booking request has been submitted for {lab_title}.\n\n"
+        f"  Name   : {booking['user_name']}\n"
+        f"  Email  : {booking['user_email']}\n"
+        f"  Slot   : {slot}\n"
+        f"  Notes  : {booking.get('notes') or '—'}\n\n"
+        f"─────────────────────────────────────\n"
+        f"APPROVE this booking:\n{approve_url}\n\n"
+        f"REJECT this booking:\n{reject_url}\n"
+        f"─────────────────────────────────────\n\n"
+        f"You can also manage bookings from the admin panel.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    send_email_for_lab(lab_slug, ADMIN[lab_slug]["email"], subject, body)
+
+
+def notify_user_approved(lab_slug: str, booking: Dict[str, Any]) -> None:
+    """Email the user when their booking is approved."""
+    if not smtp_ready_for_lab(lab_slug):
+        return
+    lab_title = LABS[lab_slug]["title"]
+    slot = f"{booking['booking_date']}  {str(booking['start_time'])[:5]}–{str(booking['end_time'])[:5]}"
+    subject = f"Booking confirmed — {lab_title}"
+    body = (
+        f"Hello {booking['user_name']},\n\n"
+        f"Great news! Your booking request for {lab_title} has been approved.\n\n"
+        f"  Lab    : {lab_title}\n"
+        f"  Slot   : {slot}\n"
+        f"  Ref    : #{booking['id']}\n\n"
+        f"Please ensure you arrive on time and follow all lab safety protocols.\n\n"
+        f"If you need to cancel or reschedule, please contact the lab administrator.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    send_email_for_lab(lab_slug, booking["user_email"], subject, body)
+
+
+def notify_user_rejected(lab_slug: str, booking: Dict[str, Any], reason: str = "") -> None:
+    """Email the user when their booking is rejected."""
+    if not smtp_ready_for_lab(lab_slug):
+        return
+    lab_title = LABS[lab_slug]["title"]
+    slot = f"{booking['booking_date']}  {str(booking['start_time'])[:5]}–{str(booking['end_time'])[:5]}"
+    subject = f"Booking request declined — {lab_title}"
+    reason_line = f"\n  Reason : {reason}\n" if reason else ""
+    body = (
+        f"Hello {booking['user_name']},\n\n"
+        f"Unfortunately your booking request for {lab_title} could not be approved.\n\n"
+        f"  Lab    : {lab_title}\n"
+        f"  Slot   : {slot}\n"
+        f"  Ref    : #{booking['id']}\n"
+        f"{reason_line}\n"
+        f"Please contact the lab administrator to discuss alternative arrangements.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    send_email_for_lab(lab_slug, booking["user_email"], subject, body)
+
+
 # ---------------- Admin auth (per lab) ----------------
 def _require_admin_vars(lab_slug: str):
     if not ADMIN[lab_slug]["email"] or not ADMIN[lab_slug]["password"]:
@@ -603,7 +678,8 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                         charge_neutralizer, mounting_method, outgassing_risk,
                         notes,
                         booking_date, start_time, end_time,
-                        updated_at, updated_by
+                        updated_at, updated_by,
+                        status, approval_token
                     ) VALUES (
                         %s,%s,%s,%s,
                         %s,%s,%s,
@@ -612,6 +688,7 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                         %s,%s,%s,
                         %s,
                         %s::date,%s::time,%s::time,
+                        %s,%s,
                         %s,%s
                     )
                     RETURNING id
@@ -627,6 +704,7 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                         payload.get("notes"),
                         payload["booking_date"], payload["start_time"], payload["end_time"],
                         payload.get("updated_at"), payload.get("updated_by"),
+                        payload.get("status", "pending"), payload.get("approval_token"),
                     ),
                 )
                 booking_id = cur.fetchone()[0]
@@ -647,8 +725,9 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                 charge_neutralizer, mounting_method, outgassing_risk,
                 notes,
                 booking_date, start_time, end_time,
-                created_at, updated_at, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, updated_by,
+                status, approval_token
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload["lab_slug"], payload.get("booking_group_id"), payload["user_name"], payload["user_email"],
@@ -662,6 +741,7 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                 payload["booking_date"], payload["start_time"], payload["end_time"],
                 datetime.utcnow().isoformat(timespec="seconds") + "Z",
                 payload.get("updated_at"), payload.get("updated_by"),
+                payload.get("status", "pending"), payload.get("approval_token"),
             ),
         )
         conn.commit()
@@ -714,6 +794,76 @@ def db_delete_booking(booking_id: int) -> None:
     else:
         conn = sqlite3.connect(SQLITE_PATH)
         conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+        conn.commit()
+        conn.close()
+
+
+def db_get_booking_by_token(token: str) -> Optional[Dict[str, Any]]:
+    """Fetch a booking by its approval_token (for one-click approve/reject links)."""
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM bookings WHERE approval_token=%s", (token,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                cols = [d.name for d in cur.description]
+                return _row_to_dict_pg(row, cols)
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM bookings WHERE approval_token=?", (token,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        for k, v in list(d.items()):
+            if k in ("vacuum", "charge_neutralizer"):
+                d[k] = "Yes" if int(v or 0) == 1 else "No"
+            elif v is None:
+                d[k] = ""
+            else:
+                d[k] = str(v)
+        return d
+
+
+def db_set_booking_status(booking_id: int, status: str, rejection_reason: str = "", updated_by: str = "") -> None:
+    """Set status to 'approved' or 'rejected', optionally record reason and who acted."""
+    init_db()
+    now_iso = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bookings
+                    SET status=%s, rejection_reason=%s,
+                        updated_at=NOW(), updated_by=%s,
+                        approval_token=NULL
+                    WHERE id=%s
+                    """,
+                    (status, rejection_reason or None, updated_by or None, booking_id),
+                )
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute(
+            """
+            UPDATE bookings
+            SET status=?, rejection_reason=?,
+                updated_at=?, updated_by=?,
+                approval_token=NULL
+            WHERE id=?
+            """,
+            (status, rejection_reason or None, now_iso, updated_by or None, booking_id),
+        )
         conn.commit()
         conn.close()
 
@@ -915,19 +1065,44 @@ def handle_generic_booking(lab_info: Dict[str, Any]):
         "user_name": user_name,
         "user_email": user_email,
         "notes": notes,
+        "status": "pending",
         "updated_at": None,
         "updated_by": None,
     }
 
     if selected_slots:
         for d, s, e in selected_slots:
+            token = str(uuid.uuid4())
             payload = dict(base_payload)
-            payload.update({"booking_date": d, "start_time": s, "end_time": e})
-            created_ids.append(db_insert_booking(payload))
+            payload.update({"booking_date": d, "start_time": s, "end_time": e, "approval_token": token})
+            bid = db_insert_booking(payload)
+            created_ids.append(bid)
+            b = db_get_booking(bid)
+            if b and smtp_ready_for_lab(lab_slug):
+                try:
+                    notify_admin_new_booking(
+                        lab_slug, b,
+                        approve_url=url_for("approve_booking", token=token, _external=True),
+                        reject_url=url_for("reject_booking_get", token=token, _external=True),
+                    )
+                except Exception:
+                    pass
     else:
+        token = str(uuid.uuid4())
         payload = dict(base_payload)
-        payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time})
-        created_ids.append(db_insert_booking(payload))
+        payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time, "approval_token": token})
+        bid = db_insert_booking(payload)
+        created_ids.append(bid)
+        b = db_get_booking(bid)
+        if b and smtp_ready_for_lab(lab_slug):
+            try:
+                notify_admin_new_booking(
+                    lab_slug, b,
+                    approve_url=url_for("approve_booking", token=token, _external=True),
+                    reject_url=url_for("reject_booking_get", token=token, _external=True),
+                )
+            except Exception:
+                pass
 
     return redirect(url_for("booking_success", booking_id=created_ids[-1]))
 
@@ -1016,6 +1191,7 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
         "user_name": user_name,
         "user_email": user_email,
         "notes": (request.form.get("notes") or "").strip(),
+        "status": "pending",
         "updated_at": None,
         "updated_by": None,
     }
@@ -1053,15 +1229,39 @@ def handle_booking_submit(lab_info: Dict[str, Any], kind: str):
 
     if selected_slots:
         for d, s, e in selected_slots:
+            token = str(uuid.uuid4())
             payload = dict(base_payload)
             payload.update(extra)
-            payload.update({"booking_date": d, "start_time": s, "end_time": e})
-            created_ids.append(db_insert_booking(payload))
+            payload.update({"booking_date": d, "start_time": s, "end_time": e, "approval_token": token})
+            bid = db_insert_booking(payload)
+            created_ids.append(bid)
+            b = db_get_booking(bid)
+            if b and smtp_ready_for_lab(lab_slug):
+                try:
+                    notify_admin_new_booking(
+                        lab_slug, b,
+                        approve_url=url_for("approve_booking", token=token, _external=True),
+                        reject_url=url_for("reject_booking_get", token=token, _external=True),
+                    )
+                except Exception:
+                    pass
     else:
+        token = str(uuid.uuid4())
         payload = dict(base_payload)
         payload.update(extra)
-        payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time})
-        created_ids.append(db_insert_booking(payload))
+        payload.update({"booking_date": booking_date, "start_time": start_time, "end_time": end_time, "approval_token": token})
+        bid = db_insert_booking(payload)
+        created_ids.append(bid)
+        b = db_get_booking(bid)
+        if b and smtp_ready_for_lab(lab_slug):
+            try:
+                notify_admin_new_booking(
+                    lab_slug, b,
+                    approve_url=url_for("approve_booking", token=token, _external=True),
+                    reject_url=url_for("reject_booking_get", token=token, _external=True),
+                )
+            except Exception:
+                pass
 
     return redirect(url_for("booking_success", booking_id=created_ids[-1]))
 
@@ -1155,6 +1355,8 @@ def admin_reserve_slots(lab_slug: str):
             "booking_date": d,
             "start_time": s,
             "end_time": e,
+            "status": "approved",           # admin reserves are pre-approved
+            "approval_token": None,
             "updated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
             "updated_by": admin_email,
         }
@@ -1282,6 +1484,169 @@ def admin_delete_booking(lab_slug: str, booking_id: int):
             flash("Booking deleted. SMTP not configured for this lab, so no email was sent.", "ok")
     except Exception as e:
         flash(f"Booking deleted, but email sending failed: {e}", "error")
+
+    return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+
+# ---- One-click approve / reject (no login required — secured by UUID token) ----
+
+@app.get("/bookings/approve/<token>")
+def approve_booking(token: str):
+    b = db_get_booking_by_token(token)
+    if not b:
+        return _token_response("Invalid or already-used link", "This approval link has already been used or is invalid.", success=False)
+
+    lab_slug = b["lab_slug"]
+    db_set_booking_status(int(b["id"]), "approved", updated_by="admin-link")
+
+    try:
+        notify_user_approved(lab_slug, b)
+    except Exception:
+        pass
+
+    return _token_response(
+        "Booking approved ✓",
+        f"You approved the booking for <strong>{b['user_name']}</strong> "
+        f"({b['booking_date']} {str(b['start_time'])[:5]}–{str(b['end_time'])[:5]}).<br/>"
+        f"A confirmation email has been sent to {b['user_email']}.",
+        lab_slug=lab_slug,
+        success=True,
+    )
+
+
+@app.get("/bookings/reject/<token>")
+def reject_booking_get(token: str):
+    """Show a small form to optionally enter a rejection reason."""
+    b = db_get_booking_by_token(token)
+    if not b:
+        return _token_response("Invalid or already-used link", "This rejection link has already been used or is invalid.", success=False)
+    lab_title = LABS.get(b["lab_slug"], {}).get("title", b["lab_slug"])
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reject booking</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+  <header class="topbar"><div class="container"><h1>Reject booking</h1></div></header>
+  <main class="container">
+    <div class="card">
+      <h2>{lab_title}</h2>
+      <div class="kv">
+        <div><span>Name</span><strong>{b['user_name']}</strong></div>
+        <div><span>Slot</span><strong>{b['booking_date']} &nbsp; {str(b['start_time'])[:5]}–{str(b['end_time'])[:5]}</strong></div>
+      </div>
+      <form method="post" style="margin-top:18px;">
+        <label>Reason for rejection (optional — will be included in the email to the user)
+          <textarea name="reason" rows="3" placeholder="e.g. Equipment maintenance, conflicting priority booking..."></textarea>
+        </label>
+        <div class="actions" style="margin-top:14px;">
+          <button class="danger" type="submit">Confirm rejection</button>
+          <a class="secondary" href="/">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </main>
+</body>
+</html>"""
+
+
+@app.post("/bookings/reject/<token>")
+def reject_booking_post(token: str):
+    b = db_get_booking_by_token(token)
+    if not b:
+        return _token_response("Invalid or already-used link", "This rejection link has already been used or is invalid.", success=False)
+
+    lab_slug = b["lab_slug"]
+    reason = (request.form.get("reason") or "").strip()
+    db_set_booking_status(int(b["id"]), "rejected", rejection_reason=reason, updated_by="admin-link")
+
+    try:
+        notify_user_rejected(lab_slug, b, reason=reason)
+    except Exception:
+        pass
+
+    return _token_response(
+        "Booking rejected",
+        f"You rejected the booking for <strong>{b['user_name']}</strong> "
+        f"({b['booking_date']} {str(b['start_time'])[:5]}–{str(b['end_time'])[:5]}).<br/>"
+        f"A notification has been sent to {b['user_email']}.",
+        lab_slug=lab_slug,
+        success=False,
+    )
+
+
+def _token_response(title: str, message: str, lab_slug: str = "", success: bool = True) -> str:
+    colour = "ok" if success else "error"
+    admin_link = f'<p><a href="{url_for("admin_lab", lab_slug=lab_slug)}">Go to admin panel</a></p>' if lab_slug else ""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{title}</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+  <header class="topbar"><div class="container"><h1>{title}</h1></div></header>
+  <main class="container">
+    <div class="card">
+      <div class="alert {colour}" style="margin-bottom:14px;">{message}</div>
+      {admin_link}
+      <p><a href="{url_for('index')}">← Back to homepage</a></p>
+    </div>
+  </main>
+</body>
+</html>"""
+
+
+# ---- Admin inline approve / reject (from admin panel, requires login) ----
+
+@app.post("/admin/<lab_slug>/approve/<int:booking_id>")
+def admin_approve_booking(lab_slug: str, booking_id: int):
+    if lab_slug not in LABS:
+        abort(404)
+    guard = require_admin(lab_slug)
+    if guard is not None:
+        return guard
+
+    b = db_get_booking(booking_id)
+    if not b or b.get("lab_slug") != lab_slug:
+        flash("Booking not found.", "error")
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+    db_set_booking_status(booking_id, "approved", updated_by=session.get("admin_email", ""))
+    try:
+        notify_user_approved(lab_slug, b)
+        flash(f"Booking #{booking_id} approved and confirmation sent to {b['user_email']}.", "ok")
+    except Exception as e:
+        flash(f"Booking approved, but email failed: {e}", "error")
+
+    return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+
+@app.post("/admin/<lab_slug>/reject/<int:booking_id>")
+def admin_reject_booking(lab_slug: str, booking_id: int):
+    if lab_slug not in LABS:
+        abort(404)
+    guard = require_admin(lab_slug)
+    if guard is not None:
+        return guard
+
+    b = db_get_booking(booking_id)
+    if not b or b.get("lab_slug") != lab_slug:
+        flash("Booking not found.", "error")
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+    reason = (request.form.get("reason") or "").strip()
+    db_set_booking_status(booking_id, "rejected", rejection_reason=reason, updated_by=session.get("admin_email", ""))
+    try:
+        notify_user_rejected(lab_slug, b, reason=reason)
+        flash(f"Booking #{booking_id} rejected and user notified.", "ok")
+    except Exception as e:
+        flash(f"Booking rejected, but email failed: {e}", "error")
 
     return redirect(url_for("admin_lab", lab_slug=lab_slug))
 

@@ -3,20 +3,34 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Booking confirmed</title>
+  <title>Booking request submitted</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
-      <h1>Booking confirmed</h1>
+      <h1>Booking request submitted</h1>
       <p class="sub">Reference ID: {{ b.id }}</p>
     </div>
   </header>
 
   <main class="container">
     <div class="card">
+      {% if b.status == 'pending' or not b.status %}
+        <div class="alert" style="border-color:rgba(255,193,7,0.55);background:rgba(255,193,7,0.08);margin-bottom:14px;">
+          ⏳ <strong>Awaiting approval</strong> — Your booking request has been submitted and is pending review by the lab administrator. You will receive an email once it is approved or declined.
+        </div>
+      {% elif b.status == 'approved' %}
+        <div class="alert ok" style="margin-bottom:14px;">
+          ✓ <strong>Confirmed</strong> — Your booking has been approved.
+        </div>
+      {% else %}
+        <div class="alert error" style="margin-bottom:14px;">
+          ✗ <strong>Declined</strong> — This booking was not approved.{% if b.rejection_reason %} Reason: {{ b.rejection_reason }}{% endif %}
+        </div>
+      {% endif %}
+
       <h2>Details</h2>
       <div class="kv">
         <div><span>Lab</span><strong>{{ b.lab_slug }}</strong></div>

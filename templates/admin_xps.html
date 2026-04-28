@@ -89,17 +89,34 @@
 
     <div class="card">
       <h2>Bookings</h2>
+
+      {% set pending_rows = rows | selectattr('status', 'equalto', 'pending') | list %}
+      {% if pending_rows %}
+        <div class="alert error" style="margin-bottom:14px;">
+          ⚠ {{ pending_rows|length }} booking(s) awaiting your approval.
+        </div>
+      {% endif %}
+
       <table class="table">
         <thead>
           <tr>
-            <th>ID</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th>
-            <th>Sample</th><th>Analysis</th><th>Elements</th><th>Notes</th><th>Edit</th>
+            <th>ID</th><th>Status</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th>
+            <th>Sample</th><th>Analysis</th><th>Elements</th><th>Notes</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for r in rows %}
             <tr>
               <td>{{ r.id }}</td>
+              <td>
+                {% if r.status == 'pending' %}
+                  <span class="badge badge-pending">Pending</span>
+                {% elif r.status == 'approved' %}
+                  <span class="badge badge-approved">Approved</span>
+                {% else %}
+                  <span class="badge badge-rejected">Rejected</span>
+                {% endif %}
+              </td>
               <td>{{ r.booking_date }}</td>
               <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
               <td>{{ r.user_name }}</td>
@@ -108,14 +125,66 @@
               <td>{{ r.analysis_type }}</td>
               <td>{{ r.elements_of_interest }}</td>
               <td class="wrap">{{ r.notes }}</td>
-              <td><a class="link" href="{{ url_for('admin_edit_booking', lab_slug='xps', booking_id=r.id) }}">Edit</a></td>
+              <td>
+                <div class="row-actions">
+                  {% if r.status == 'pending' %}
+                    <form method="post" action="{{ url_for('admin_approve_booking', lab_slug='xps', booking_id=r.id) }}" style="display:inline;">
+                      <button class="btn-approve" type="submit">✓ Approve</button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin_reject_booking', lab_slug='xps', booking_id=r.id) }}" style="display:inline;" class="reject-form" data-name="{{ r.user_name }}">
+                      <input type="hidden" name="reason" class="reject-reason-hidden" value=""/>
+                      <button class="btn-reject" type="submit">✗ Reject</button>
+                    </form>
+                  {% endif %}
+                  <a class="link" href="{{ url_for('admin_edit_booking', lab_slug='xps', booking_id=r.id) }}">Edit</a>
+                  <form method="post" action="{{ url_for('admin_delete_booking', lab_slug='xps', booking_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Delete this booking?');">
+                    <button class="btn-del" type="submit">Delete</button>
+                  </form>
+                </div>
+              </td>
             </tr>
           {% else %}
-            <tr><td colspan="10" class="empty">No bookings yet.</td></tr>
+            <tr><td colspan="11" class="empty">No bookings yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </main>
+
+  <!-- Reject reason modal -->
+  <div id="reject-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:440px;width:90%;">
+      <h3 style="margin-top:0;">Reject booking</h3>
+      <p id="reject-modal-label" style="color:var(--muted);margin-bottom:10px;"></p>
+      <label>Reason (optional)<textarea id="reject-modal-reason" rows="3" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0f1220;color:var(--text);" placeholder="e.g. Equipment maintenance…"></textarea></label>
+      <div class="actions" style="margin-top:14px;">
+        <button id="reject-modal-confirm" class="btn-reject">Confirm rejection</button>
+        <button id="reject-modal-cancel" class="secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    let _activeForm = null;
+    document.querySelectorAll('.reject-form').forEach(form => {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        _activeForm = form;
+        document.getElementById('reject-modal-label').textContent = 'Rejecting booking for: ' + form.dataset.name;
+        document.getElementById('reject-modal-reason').value = '';
+        document.getElementById('reject-modal').style.display = 'flex';
+      });
+    });
+    document.getElementById('reject-modal-confirm').addEventListener('click', function() {
+      if (_activeForm) {
+        _activeForm.querySelector('.reject-reason-hidden').value = document.getElementById('reject-modal-reason').value;
+        document.getElementById('reject-modal').style.display = 'none';
+        _activeForm.submit();
+      }
+    });
+    document.getElementById('reject-modal-cancel').addEventListener('click', function() {
+      document.getElementById('reject-modal').style.display = 'none';
+      _activeForm = null;
+    });
+  </script>
 </body>
 </html>
