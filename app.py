@@ -57,7 +57,8 @@ LABS = {
     "spin-coater": {"title": "Spin coater", "subtitle": "Thin film deposition"},
 }
 
-# Per-lab admins (email username + password)
+# Per-lab admins — username (any string) + password for the admin panel login
+# These are NOT email addresses; they are just login credentials for the portal.
 def _env_slug(slug: str) -> str:
     return slug.upper().replace("-", "_").replace(" ", "_")
 
@@ -65,29 +66,32 @@ ADMIN: Dict[str, Dict[str, str]] = {}
 for _slug in LABS.keys():
     key = _env_slug(_slug)
     ADMIN[_slug] = {
-        "email": os.environ.get(f"ADMIN_{key}_EMAIL", "").strip(),
+        "username": os.environ.get(f"ADMIN_{key}_USERNAME", "").strip(),
         "password": os.environ.get(f"ADMIN_{key}_PASSWORD", "").strip(),
     }
 
-# SMTP global host settings
+# SMTP — one shared outgoing email account (e.g. a shared Zoho inbox)
 SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes", "y")
 SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Booking Portal")
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()       # e.g. nanolab.bookings@zohomail.com
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
 
 
 def _smtp_for_lab(lab_slug: str) -> Dict[str, Any]:
     """
-    Defaults:
-      user/pass/from = that lab's admin email/password
-    Optional overrides:
-      SMTP_<LABKEY>_USER / SMTP_<LABKEY>_PASSWORD / SMTP_<LABKEY>_FROM
+    All labs share one outgoing SMTP account (SMTP_USER / SMTP_PASSWORD).
+    The from/reply-to address is that shared inbox.
     """
-    labkey = _env_slug(lab_slug)
-    user = os.environ.get(f"SMTP_{labkey}_USER", "").strip() or ADMIN[lab_slug]["email"]
-    pw = os.environ.get(f"SMTP_{labkey}_PASSWORD", "").strip() or ADMIN[lab_slug]["password"]
-    from_addr = os.environ.get(f"SMTP_{labkey}_FROM", "").strip() or user
-    return {"host": SMTP_HOST, "port": SMTP_PORT, "tls": SMTP_USE_TLS, "user": user, "password": pw, "from": from_addr}
+    return {
+        "host": SMTP_HOST,
+        "port": SMTP_PORT,
+        "tls": SMTP_USE_TLS,
+        "user": SMTP_USER,
+        "password": SMTP_PASSWORD,
+        "from": SMTP_USER,
+    }
 
 
 # ---- schema (auto-migration) ----
@@ -436,8 +440,7 @@ def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
 
 # ---------------- Email ----------------
 def smtp_ready_for_lab(lab_slug: str) -> bool:
-    cfg = _smtp_for_lab(lab_slug)
-    return bool(cfg["host"] and cfg["user"] and cfg["password"] and cfg["from"])
+    return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
 def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) -> None:
     cfg = _smtp_for_lab(lab_slug)
@@ -448,7 +451,7 @@ def send_email_for_lab(lab_slug: str, to_email: str, subject: str, body: str) ->
     msg["From"] = f"{SMTP_FROM_NAME} <{cfg['from']}>"
     msg["To"] = to_email
     msg["Subject"] = subject
-    msg["Reply-To"] = ADMIN[lab_slug]["email"]
+    msg["Reply-To"] = SMTP_USER
     msg.set_content(body)
 
     if cfg["tls"]:
@@ -485,7 +488,7 @@ def notify_admin_new_booking(lab_slug: str, booking: Dict[str, Any], approve_url
         f"You can also manage bookings from the admin panel.\n\n"
         f"Regards,\n{SMTP_FROM_NAME}\n"
     )
-    send_email_for_lab(lab_slug, ADMIN[lab_slug]["email"], subject, body)
+    send_email_for_lab(lab_slug, SMTP_USER, subject, body)
 
 
 def notify_user_approved(lab_slug: str, booking: Dict[str, Any]) -> None:
@@ -531,8 +534,8 @@ def notify_user_rejected(lab_slug: str, booking: Dict[str, Any], reason: str = "
 
 # ---------------- Admin auth (per lab) ----------------
 def _require_admin_vars(lab_slug: str):
-    if not ADMIN[lab_slug]["email"] or not ADMIN[lab_slug]["password"]:
-        abort(404, description=f"Admin not configured for {lab_slug}. Set ADMIN_{_env_slug(lab_slug)}_EMAIL and ADMIN_{_env_slug(lab_slug)}_PASSWORD.")
+    if not ADMIN[lab_slug]["username"] or not ADMIN[lab_slug]["password"]:
+        abort(404, description=f"Admin not configured for {lab_slug}. Set ADMIN_{_env_slug(lab_slug)}_USERNAME and ADMIN_{_env_slug(lab_slug)}_PASSWORD.")
 
 def is_admin_for(lab_slug: str) -> bool:
     return session.get("is_admin") is True and session.get("admin_lab") == lab_slug
@@ -553,11 +556,11 @@ def admin_login_lab(lab_slug: str):
         user = (request.form.get("username") or "").strip()
         pw = (request.form.get("password") or "").strip()
 
-        if hmac.compare_digest(user.lower(), ADMIN[lab_slug]["email"].lower()) and hmac.compare_digest(pw, ADMIN[lab_slug]["password"]):
+        if hmac.compare_digest(user.lower(), ADMIN[lab_slug]["username"].lower()) and hmac.compare_digest(pw, ADMIN[lab_slug]["password"]):
             session.clear()
             session["is_admin"] = True
             session["admin_lab"] = lab_slug
-            session["admin_email"] = ADMIN[lab_slug]["email"]
+            session["admin_username"] = ADMIN[lab_slug]["username"]
             nxt = request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug)
             return redirect(nxt)
 
@@ -567,7 +570,7 @@ def admin_login_lab(lab_slug: str):
         "admin_login.html",
         lab_slug=lab_slug,
         lab_title=LABS[lab_slug]["title"],
-        admin_email_hint=ADMIN[lab_slug]["email"],
+        admin_username_hint=ADMIN[lab_slug]["username"],
         next=request.args.get("next") or url_for("admin_lab", lab_slug=lab_slug),
     )
 
@@ -1284,7 +1287,7 @@ def admin_lab(lab_slug: str):
 
     rows = db_list_bookings(lab_slug)
     days = availability_days(lab_slug)
-    admin_email = session.get("admin_email", "")
+    admin_username = session.get("admin_username", "")
 
     template = "admin_furnace.html" if lab_slug == "furnace" else ("admin_xps.html" if lab_slug == "xps" else "admin_generic.html")
     return render_template(
@@ -1293,7 +1296,7 @@ def admin_lab(lab_slug: str):
         lab_slug=lab_slug,
         rows=rows,
         days=days,
-        admin_email=admin_email,
+        admin_username=admin_username,
         smtp_ready=smtp_ready_for_lab(lab_slug),
     )
 
@@ -1311,7 +1314,7 @@ def admin_reserve_slots(lab_slug: str):
     end_time = (request.form.get("end_time") or "").strip()
 
     user_name = (request.form.get("user_name") or "").strip() or "ADMIN RESERVED"
-    user_email = (request.form.get("user_email") or "").strip() or session.get("admin_email", "")
+    user_email = (request.form.get("user_email") or "").strip() or SMTP_USER
     notes = (request.form.get("notes") or "").strip() or "Reserved by admin"
 
     errors: List[str] = []
@@ -1343,7 +1346,7 @@ def admin_reserve_slots(lab_slug: str):
 
     group_id = str(uuid.uuid4()) if selected_slots else None
     created = 0
-    admin_email = session.get("admin_email", "")
+    admin_username = session.get("admin_username", "")
 
     for d, s, e in (selected_slots or [(booking_date, start_time, end_time)]):
         payload = {
@@ -1358,7 +1361,7 @@ def admin_reserve_slots(lab_slug: str):
             "status": "approved",           # admin reserves are pre-approved
             "approval_token": None,
             "updated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "updated_by": admin_email,
+            "updated_by": admin_username,
         }
         db_insert_booking(payload)
         created += 1
@@ -1387,7 +1390,7 @@ def admin_edit_booking(lab_slug: str, booking_id: int):
         b=b,
         days=days,
         smtp_ready=smtp_ready_for_lab(lab_slug),
-        admin_email=session.get("admin_email", ""),
+        admin_username=session.get("admin_username", ""),
     )
 
 @app.post("/admin/<lab_slug>/edit/<int:booking_id>")
@@ -1427,8 +1430,8 @@ def admin_update_booking(lab_slug: str, booking_id: int):
     old = f"{b.get('booking_date')} {str(b.get('start_time'))[:5]}–{str(b.get('end_time'))[:5]}"
     new = f"{new_date} {new_start}–{new_end}"
 
-    admin_email = session.get("admin_email", "")
-    db_update_booking_time(booking_id, new_date, new_start, new_end, updated_by=admin_email)
+    admin_username = session.get("admin_username", "")
+    db_update_booking_time(booking_id, new_date, new_start, new_end, updated_by=admin_username)
 
     try:
         subject = f"Booking updated: {LABS[lab_slug]['title']}"
@@ -1617,7 +1620,7 @@ def admin_approve_booking(lab_slug: str, booking_id: int):
         flash("Booking not found.", "error")
         return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
-    db_set_booking_status(booking_id, "approved", updated_by=session.get("admin_email", ""))
+    db_set_booking_status(booking_id, "approved", updated_by=session.get("admin_username", ""))
     try:
         notify_user_approved(lab_slug, b)
         flash(f"Booking #{booking_id} approved and confirmation sent to {b['user_email']}.", "ok")
@@ -1641,7 +1644,7 @@ def admin_reject_booking(lab_slug: str, booking_id: int):
         return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
     reason = (request.form.get("reason") or "").strip()
-    db_set_booking_status(booking_id, "rejected", rejection_reason=reason, updated_by=session.get("admin_email", ""))
+    db_set_booking_status(booking_id, "rejected", rejection_reason=reason, updated_by=session.get("admin_username", ""))
     try:
         notify_user_rejected(lab_slug, b, reason=reason)
         flash(f"Booking #{booking_id} rejected and user notified.", "ok")

@@ -11,7 +11,7 @@
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab_title }}</h1>
-      <p class="sub">Admin: {{ admin_email }} · SMTP: {{ 'ready' if smtp_ready else 'not configured' }}</p>
+      <p class="sub">Admin: {{ admin_username }} · SMTP: {{ 'ready' if smtp_ready else 'not configured' }}</p>
       <nav class="tabs">
         <a class="tab" href="{{ url_for('xps') }}">User booking</a>
         <a class="tab" href="{{ url_for('lab_availability', lab_slug='xps') }}">Public availability</a>
@@ -44,7 +44,7 @@
       <h2>Admin quick booking: reserve slot(s)</h2>
       <div class="row">
         <label>Name (optional)<input name="user_name" placeholder="ADMIN RESERVED" /></label>
-        <label>Email (optional)<input name="user_email" placeholder="{{ admin_email }}" /></label>
+        <label>Email (optional)<input name="user_email" placeholder="{{ admin_username }}" /></label>
       </div>
       <label>Notes<input name="notes" placeholder="Reserved / maintenance / VIP booking..." /></label>
 
