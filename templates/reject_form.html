@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reject Booking | U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <h1>Reject booking</h1>
+      <p class="sub">{{ lab_title }}</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <h2>Booking details</h2>
+      <div class="kv">
+        <div><span>Name</span><strong>{{ b.user_name }}</strong></div>
+        <div><span>Email</span><strong>{{ b.user_email }}</strong></div>
+        <div><span>Lab</span><strong>{{ lab_title }}</strong></div>
+        <div><span>Slot</span><strong>{{ b.booking_date }} &nbsp; {{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</strong></div>
+        {% if b.notes %}<div><span>Notes</span><strong>{{ b.notes }}</strong></div>{% endif %}
+      </div>
+    </div>
+
+    <form class="card" method="post">
+      <h2>Confirm rejection</h2>
+      <label>Reason for rejection <span style="color:var(--muted);">(optional — will be included in the email to the user)</span>
+        <textarea name="reason" rows="3" placeholder="e.g. Equipment undergoing maintenance, conflicting priority booking, insufficient notice..."></textarea>
+      </label>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn-reject" type="submit">✗ Confirm rejection</button>
+        <a class="secondary" href="{{ url_for('index') }}">Cancel</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

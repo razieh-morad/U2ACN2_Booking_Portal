@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>{{ lab.title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
   <header class="topbar">
@@ -13,8 +13,9 @@
       <h1>{{ lab.title }}</h1>
       <p class="sub">{{ lab.brand }}</p>
       <nav class="tabs">
-        <a class="tab active" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">Booking</a>
-        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab.slug) }}">Availability</a>
+        <a class="tab active" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">Book</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab.slug) }}">Timetable</a>
+        <a class="tab" href="{{ url_for('lab_recurring', lab_slug=lab.slug) }}">Recurring</a>
       </nav>
     </div>
   </header>
@@ -22,41 +23,60 @@
   <main class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="alerts">
-          {% for category, msg in messages %}
-            <div class="alert {{ category }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
+        <div class="alerts">{% for cat,msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}</div>
       {% endif %}
     {% endwith %}
+
+    {% if rules %}
+      <div class="card" style="padding:12px 18px;">
+        <div class="legend" style="flex-wrap:wrap;gap:12px;">
+          {% if rules.min_notice_hours %}<span>⏱ Min notice: <strong>{{ rules.min_notice_hours }}h</strong></span>{% endif %}
+          {% if rules.max_duration_hours %}<span>⏳ Max duration: <strong>{{ rules.max_duration_hours }}h</strong></span>{% endif %}
+          {% if rules.max_days_ahead %}<span>📅 Book up to: <strong>{{ rules.max_days_ahead }} days ahead</strong></span>{% endif %}
+        </div>
+      </div>
+    {% endif %}
 
     <form class="card" method="post" novalidate>
       <h2>Your details</h2>
       <div class="row">
-        <label>Your name *<input name="user_name" value="{{ form.get('user_name','') }}" required /></label>
-        <label>Email *<input name="user_email" type="email" value="{{ form.get('user_email','') }}" required /></label>
+        <label>Your name *<input name="user_name" value="{{ form.get('user_name','') }}" required/></label>
+        <label>Email *<input name="user_email" type="email" value="{{ form.get('user_email','') }}" required/></label>
       </div>
 
       <h2>Choose slot(s)</h2>
-      <p class="hint">Select one or more available slots below. If selected, the manual date/time fields are ignored.</p>
+      <p class="hint">Select one or more available slots, or enter a date/time manually below.</p>
       <div class="card-inner">
-<div class="legend">
-          <span class="dot free"></span> Available (select one or more)
-          <span class="dot booked"></span> Booked
+        <div class="legend"><span class="dot free"></span> Available &nbsp; <span class="dot booked"></span> Booked</div>
+        {% for day in days %}
+          <h3 class="day-title">{{ day.date.strftime("%A, %d %b %Y") }}</h3>
+          <div class="slot-grid">
+            {% for s in day.slots %}
+              {% if s.free %}
+                <label class="slot slot-select free">
+                  <input type="checkbox" name="slot" value="{{ s.value }}"/>
+                  <div><div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Available</div></div>
+                </label>
+              {% else %}
+                <div class="slot booked"><div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Booked</div></div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endfor %}
       </div>
 
-      <h3 class="section">Or manual date/time (single slot)</h3>
+      <h3 class="section">Or manual date/time</h3>
       <div class="row">
-        <label>Date<input name="booking_date" type="date" value="{{ form.get('booking_date','') }}" /></label>
-        <label>Start time<input name="start_time" type="time" value="{{ form.get('start_time','') }}" /></label>
-        <label>End time<input name="end_time" type="time" value="{{ form.get('end_time','') }}" /></label>
+        <label>Date<input name="booking_date" type="date" value="{{ form.get('booking_date','') }}"/></label>
+        <label>Start time<input name="start_time" type="time" value="{{ form.get('start_time','') }}"/></label>
+        <label>End time<input name="end_time" type="time" value="{{ form.get('end_time','') }}"/></label>
       </div>
 
-      <label>Notes / request<textarea name="notes" rows="4">{{ form.get('notes','') }}</textarea></label>
+      <label>Notes / request<textarea name="notes" rows="3">{{ form.get('notes','') }}</textarea></label>
 
       <div class="actions">
-        <button type="submit">Submit booking</button>
-        <a class="secondary" href="{{ url_for('lab_availability', lab_slug=lab.slug) }}">View availability</a>
+        <button type="submit">Submit booking request</button>
+        <a class="btn-secondary" href="{{ url_for('lab_recurring', lab_slug=lab.slug) }}">Recurring booking</a>
       </div>
     </form>
   </main>

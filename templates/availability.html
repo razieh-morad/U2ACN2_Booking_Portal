@@ -1,32 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>{{ lab_title }} | Availability</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>{{ lab_title }}</h1>
-      <p class="sub">Availability · Next two weeks · Monday–Friday · 08:00–16:00</p>
-
+      <p class="sub">Availability · Next two weeks · Mon–Fri · 08:00–16:00</p>
       <nav class="tabs">
-        <a class="tab" href="{{ booking_url }}">Booking</a>
-        <a class="tab active" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Availability</a>
+        <a class="tab" href="{{ booking_url }}">Book</a>
+        <a class="tab active" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Timetable</a>
       </nav>
     </div>
   </header>
 
   <main class="container">
-    <div class="card">
+    <!-- View toggle -->
+    <div class="view-toggle card" style="padding:12px 18px;margin-bottom:0;">
       <div class="legend">
-        <span class="dot free"></span> Available (click to prefill)
+        <span class="dot free"></span> Available — click to book
         <span class="dot booked"></span> Booked
       </div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="btn-secondary" id="btn-list" onclick="showView('list')">List view</button>
+        <button class="btn-secondary" id="btn-week" onclick="showView('week')">Week grid</button>
+      </div>
+    </div>
 
+    <!-- LIST VIEW -->
+    <div id="view-list" class="card">
       {% for day in days %}
         <h3 class="day-title">{{ day.date.strftime("%A, %d %b %Y") }}</h3>
         <div class="slot-grid">
@@ -47,6 +54,77 @@
         </div>
       {% endfor %}
     </div>
+
+    <!-- WEEK GRID VIEW -->
+    <div id="view-week" class="card" style="display:none;overflow-x:auto;">
+      {% set all_times = [] %}
+      {% for day in days %}
+        {% for s in day.slots %}
+          {% if s.start not in all_times %}{% set _ = all_times.append(s.start) %}{% endif %}
+        {% endfor %}
+      {% endfor %}
+
+      {# Build weeks: group days into Mon–Fri chunks #}
+      {% set week_groups = [] %}
+      {% set current_week = [] %}
+      {% for day in days %}
+        {% set _ = current_week.append(day) %}
+        {% if day.date.weekday() == 4 or loop.last %}
+          {% set _ = week_groups.append(current_week[:]) %}
+          {% set _ = current_week.clear() %}
+        {% endif %}
+      {% endfor %}
+
+      {% for week in week_groups %}
+        <h3 class="day-title">Week of {{ week[0].date.strftime("%d %b") }} – {{ week[-1].date.strftime("%d %b %Y") }}</h3>
+        <div class="timetable-wrap">
+          <table class="timetable">
+            <thead>
+              <tr>
+                <th class="timetable-time-col">Time</th>
+                {% for day in week %}
+                  <th>{{ day.date.strftime("%a") }}<br/><span style="font-weight:400;font-size:12px;">{{ day.date.strftime("%d %b") }}</span></th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in all_times %}
+                <tr>
+                  <td class="timetable-time-col">{{ t }}</td>
+                  {% for day in week %}
+                    {% set slot = day.slots | selectattr('start','equalto',t) | list %}
+                    {% if slot %}
+                      {% if slot[0].free %}
+                        <td class="tt-free">
+                          <a href="{{ url_for('prefill_booking', lab_slug=lab_slug, booking_date=slot[0].date, start_time=slot[0].start, end_time=slot[0].end) }}"
+                             class="tt-link">{{ slot[0].start }}–{{ slot[0].end }}<br/>Book →</a>
+                        </td>
+                      {% else %}
+                        <td class="tt-booked">Booked</td>
+                      {% endif %}
+                    {% else %}
+                      <td class="tt-empty">—</td>
+                    {% endif %}
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endfor %}
+    </div>
   </main>
+
+  <script>
+    function showView(v) {
+      document.getElementById('view-list').style.display = v === 'list' ? '' : 'none';
+      document.getElementById('view-week').style.display = v === 'week' ? '' : 'none';
+      document.getElementById('btn-list').style.opacity = v === 'list' ? '1' : '0.5';
+      document.getElementById('btn-week').style.opacity = v === 'week' ? '1' : '0.5';
+      localStorage.setItem('avail-view', v);
+    }
+    const saved = localStorage.getItem('avail-view') || 'list';
+    showView(saved);
+  </script>
 </body>
 </html>

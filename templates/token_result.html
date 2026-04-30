@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ title }} | U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <h1>{{ title }}</h1>
+    </div>
+  </header>
+  <main class="container">
+    <div class="card">
+      <div class="alert {{ colour }}" style="margin-bottom:14px;">{{ message|safe }}</div>
+      {% if admin_link %}{{ admin_link|safe }}{% endif %}
+      <p><a href="{{ url_for('index') }}">← Back to homepage</a></p>
+    </div>
+  </main>
+</body>
+</html>

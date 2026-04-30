@@ -1,0 +1,13 @@
+<div id="reject-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:440px;width:90%;">
+    <h3 style="margin-top:0;">Reject booking</h3>
+    <p id="reject-modal-label" style="color:var(--muted);margin-bottom:10px;"></p>
+    <label>Reason for rejection <span style="color:var(--muted);font-size:12px;">(optional — sent to user)</span>
+      <textarea id="reject-modal-reason" rows="3" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0f1220;color:var(--text);" placeholder="e.g. Equipment maintenance…"></textarea>
+    </label>
+    <div class="actions" style="margin-top:14px;">
+      <button id="reject-modal-confirm" class="btn-reject">Confirm rejection</button>
+      <button id="reject-modal-cancel" type="button" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>

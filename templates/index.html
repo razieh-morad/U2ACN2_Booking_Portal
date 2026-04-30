@@ -1,50 +1,47 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>U2ACN2 Nanolab Booking Portal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <h1>U2ACN2 Nanolab Booking Portal</h1>
-      <p class="sub">UNESCO-UNISA-iTL/NRF Chair</p>
+      <p class="sub">UNESCO-UNISA-iTL/NRF Chair · iThemba LABS</p>
     </div>
   </header>
 
   <main class="container">
     <div class="card">
-      <h2>Labs</h2>
+      <div class="card-header-row">
+        <h2 style="margin:0;">Available Labs</h2>
+        <a class="btn-secondary" href="{{ url_for('my_bookings') }}">📋 My bookings</a>
+      </div>
       <div class="grid">
         {% for lab in labs %}
-          <a class="lab" href="{{ lab.booking_url }}">
-            <div class="lab-title">{{ lab.title }}</div>
-            <div class="lab-sub">{{ lab.subtitle }}</div>
-            <div class="lab-cta">Book →</div>
-          </a>
+          <div class="lab-card">
+            <div class="lab-card-body">
+              <div class="lab-title">{{ lab.title }}</div>
+              <div class="lab-sub">{{ lab.subtitle }}</div>
+              {% if lab.pending_count %}
+                <span class="badge badge-pending" style="margin-top:8px;">{{ lab.pending_count }} pending approval</span>
+              {% endif %}
+            </div>
+            <div class="lab-card-actions">
+              <a href="{{ lab.booking_url }}" class="btn-book">Book →</a>
+              <a href="{{ lab.availability_url }}" class="btn-avail">Timetable</a>
+            </div>
+          </div>
         {% endfor %}
       </div>
     </div>
-
-    <div class="card">
-      <h2>Quick links</h2>
-      <div class="grid">
-        {% for lab in labs %}
-          <a class="lab" href="{{ lab.availability_url }}">
-            <div class="lab-title">{{ lab.title }}</div>
-            <div class="lab-sub">View availability</div>
-            <div class="lab-cta">Availability →</div>
-          </a>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="hint">
+    <p class="hint" style="text-align:center;margin-top:8px;">
       <a href="{{ admin_portal_url }}">Admin portal</a>
-      <span class="sub">· Choose a lab to view its timetable (login required per lab)</span>
-    </div>
+      <span class="sub"> · Login required per lab</span>
+    </p>
   </main>
 </body>
 </html>

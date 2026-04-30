@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>My Bookings | U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('index') }}">← Labs</a>
+      <h1>My Bookings</h1>
+      <p class="sub">Look up your past and upcoming bookings by email address.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts">{% for cat,msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}</div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post">
+      <h2>Find your bookings</h2>
+      <div class="row">
+        <label>Your email address
+          <input name="email" type="email" value="{{ email }}" placeholder="you@example.com" required autocomplete="email"/>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit">Look up bookings</button>
+      </div>
+    </form>
+
+    {% if email %}
+      {% if bookings %}
+        <div class="card">
+          <h2>Bookings for {{ email }}</h2>
+          <p class="hint">{{ bookings|length }} booking(s) found.</p>
+          <table class="table">
+            <thead>
+              <tr><th>Ref</th><th>Lab</th><th>Date</th><th>Time</th><th>Status</th><th>Notes</th><th>Calendar</th></tr>
+            </thead>
+            <tbody>
+              {% for b in bookings %}
+                <tr>
+                  <td>#{{ b.id }}</td>
+                  <td>{{ b.lab_title }}</td>
+                  <td>{{ b.booking_date }}</td>
+                  <td>{{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</td>
+                  <td>
+                    {% if b.status == 'pending' %}
+                      <span class="badge badge-pending">Pending</span>
+                    {% elif b.status == 'approved' %}
+                      <span class="badge badge-approved">Approved</span>
+                    {% elif b.cancelled_at %}
+                      <span class="badge badge-rejected">Cancelled</span>
+                    {% else %}
+                      <span class="badge badge-rejected">Declined</span>
+                    {% endif %}
+                  </td>
+                  <td class="wrap">{{ b.notes }}</td>
+                  <td>
+                    {% if b.status == 'approved' and not b.cancelled_at %}
+                      <a class="link" href="{{ url_for('booking_ical', booking_id=b.id) }}" title="Add to calendar">📅 .ics</a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card">
+          <p class="hint" style="text-align:center; padding:24px;">No bookings found for <strong>{{ email }}</strong>.</p>
+        </div>
+      {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

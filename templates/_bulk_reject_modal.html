@@ -1,0 +1,13 @@
+<div id="bulk-reject-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:440px;width:90%;">
+    <h3 style="margin-top:0;">Bulk rejection reason</h3>
+    <p style="color:var(--muted);margin-bottom:10px;">Optional reason applied to all selected rejections.</p>
+    <label>
+      <textarea id="bulk-reject-reason" rows="3" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0f1220;color:var(--text);" placeholder="e.g. Equipment maintenance this week…"></textarea>
+    </label>
+    <div class="actions" style="margin-top:14px;">
+      <button id="bulk-reject-confirm" class="btn-reject">Confirm bulk rejection</button>
+      <button id="bulk-reject-cancel" type="button" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>

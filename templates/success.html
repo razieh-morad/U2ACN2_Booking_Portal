@@ -1,51 +1,65 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Booking request submitted</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Booking submitted | U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
   <header class="topbar">
     <div class="container">
       <a class="back" href="{{ url_for('index') }}">← Labs</a>
       <h1>Booking request submitted</h1>
-      <p class="sub">Reference ID: {{ b.id }}</p>
+      <p class="sub">Reference #{{ b.id }}</p>
     </div>
   </header>
 
   <main class="container">
     <div class="card">
       {% if b.status == 'pending' or not b.status %}
-        <div class="alert" style="border-color:rgba(255,193,7,0.55);background:rgba(255,193,7,0.08);margin-bottom:14px;">
-          ⏳ <strong>Awaiting approval</strong> — Your booking request has been submitted and is pending review by the lab administrator. You will receive an email once it is approved or declined.
+        <div class="alert" style="border-color:rgba(255,193,7,0.55);background:rgba(255,193,7,0.08);margin-bottom:16px;">
+          ⏳ <strong>Awaiting approval</strong> — Your request has been submitted and is pending review by the lab administrator. You will receive an email once it is approved or declined.
         </div>
       {% elif b.status == 'approved' %}
-        <div class="alert ok" style="margin-bottom:14px;">
+        <div class="alert ok" style="margin-bottom:16px;">
           ✓ <strong>Confirmed</strong> — Your booking has been approved.
         </div>
       {% else %}
-        <div class="alert error" style="margin-bottom:14px;">
+        <div class="alert error" style="margin-bottom:16px;">
           ✗ <strong>Declined</strong> — This booking was not approved.{% if b.rejection_reason %} Reason: {{ b.rejection_reason }}{% endif %}
         </div>
       {% endif %}
 
-      <h2>Details</h2>
+      <h2>Booking details</h2>
       <div class="kv">
-        <div><span>Lab</span><strong>{{ b.lab_slug }}</strong></div>
+        <div><span>Lab</span><strong>{{ lab_title }}</strong></div>
         <div><span>Date</span><strong>{{ b.booking_date }}</strong></div>
         <div><span>Time</span><strong>{{ (b.start_time|string)[:5] }}–{{ (b.end_time|string)[:5] }}</strong></div>
         <div><span>Name</span><strong>{{ b.user_name }}</strong></div>
         <div><span>Email</span><strong>{{ b.user_email }}</strong></div>
+        <div><span>Status</span>
+          <strong>
+            {% if b.status == 'pending' %}<span class="badge badge-pending">Pending</span>
+            {% elif b.status == 'approved' %}<span class="badge badge-approved">Approved</span>
+            {% else %}<span class="badge badge-rejected">Declined</span>{% endif %}
+          </strong>
+        </div>
         {% if b.booking_group_id %}
-          <div><span>Group</span><strong>{{ b.booking_group_id }}</strong></div>
+          <div><span>Group ref</span><strong>{{ b.booking_group_id[:8] }}…</strong></div>
         {% endif %}
       </div>
-      <p class="hint">If you selected multiple slots, each slot is stored separately (same Group ID).</p>
-      <div class="actions">
-        <a class="secondary" href="{{ url_for('index') }}">Back to labs</a>
+
+      <div class="actions" style="margin-top:16px;">
+        {% if b.status == 'approved' %}
+          <a class="btn-approve" href="{{ url_for('booking_ical', booking_id=b.id) }}">📅 Add to calendar (.ics)</a>
+        {% endif %}
+        <a class="btn-secondary" href="{{ url_for('my_bookings') }}">My bookings</a>
+        <a class="btn-secondary" href="{{ url_for('index') }}">← Back to labs</a>
       </div>
+      {% if b.status == 'pending' %}
+        <p class="hint" style="margin-top:12px;">Check your booking status any time at <a href="{{ url_for('my_bookings') }}">My bookings</a>.</p>
+      {% endif %}
     </div>
   </main>
 </body>

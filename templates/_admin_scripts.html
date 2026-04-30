@@ -1,0 +1,55 @@
+<script>
+// Single reject modal
+let _activeRejectForm = null;
+document.querySelectorAll('.reject-form').forEach(form => {
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    _activeRejectForm = form;
+    document.getElementById('reject-modal-label').textContent = 'Rejecting booking for: ' + form.dataset.name;
+    document.getElementById('reject-modal-reason').value = '';
+    document.getElementById('reject-modal').style.display = 'flex';
+  });
+});
+document.getElementById('reject-modal-confirm').addEventListener('click', function() {
+  if (_activeRejectForm) {
+    _activeRejectForm.querySelector('.reject-reason-hidden').value = document.getElementById('reject-modal-reason').value;
+    document.getElementById('reject-modal').style.display = 'none';
+    _activeRejectForm.submit();
+  }
+});
+document.getElementById('reject-modal-cancel').addEventListener('click', function() {
+  document.getElementById('reject-modal').style.display = 'none';
+  _activeRejectForm = null;
+});
+
+// Select-all checkbox
+const chkAll = document.getElementById('chk-all');
+if (chkAll) {
+  chkAll.addEventListener('change', function() {
+    document.querySelectorAll('.chk-row').forEach(c => c.checked = this.checked);
+  });
+}
+
+// Bulk form: intercept reject to ask for reason
+const bulkForm = document.getElementById('bulk-form');
+if (bulkForm) {
+  bulkForm.addEventListener('submit', function(e) {
+    const action = bulkForm.querySelector('[name=action]').value;
+    const checked = bulkForm.querySelectorAll('.chk-row:checked').length;
+    if (checked === 0) { e.preventDefault(); alert('No bookings selected.'); return; }
+    if (action === 'reject') {
+      e.preventDefault();
+      document.getElementById('bulk-reject-reason').value = '';
+      document.getElementById('bulk-reject-modal').style.display = 'flex';
+    }
+  });
+  document.getElementById('bulk-reject-confirm').addEventListener('click', function() {
+    document.getElementById('bulk-reason-field').value = document.getElementById('bulk-reject-reason').value;
+    document.getElementById('bulk-reject-modal').style.display = 'none';
+    bulkForm.submit();
+  });
+  document.getElementById('bulk-reject-cancel').addEventListener('click', function() {
+    document.getElementById('bulk-reject-modal').style.display = 'none';
+  });
+}
+</script>

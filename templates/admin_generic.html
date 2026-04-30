@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Admin | {{ lab_title }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
   <header class="topbar">
@@ -14,7 +14,7 @@
       <p class="sub">Admin: {{ admin_username }} · SMTP: {{ 'ready' if smtp_ready else 'not configured' }}</p>
       <nav class="tabs">
         <a class="tab" href="{{ url_for('lab_generic', lab_slug=lab_slug) }}">User booking</a>
-        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Public availability</a>
+        <a class="tab" href="{{ url_for('lab_availability', lab_slug=lab_slug) }}">Timetable</a>
         <a class="tab active" href="{{ url_for('admin_lab', lab_slug=lab_slug) }}">Admin</a>
         <a class="tab" href="{{ url_for('admin_logout') }}">Logout</a>
       </nav>
@@ -24,146 +24,125 @@
   <main class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="alerts">
-          {% for category, msg in messages %}
-            <div class="alert {{ category }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
+        <div class="alerts">{% for cat,msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}</div>
       {% endif %}
     {% endwith %}
 
     <div class="card">
       <h2>Export</h2>
       <div class="actions">
-        <a class="secondary" href="{{ url_for('admin_export_csv', lab_slug=lab_slug) }}">Download CSV</a>
-        <a class="secondary" href="{{ url_for('admin_export_xlsx', lab_slug=lab_slug) }}">Download Excel</a>
+        <a class="btn-secondary" href="{{ url_for('admin_export_csv', lab_slug=lab_slug) }}">Download CSV</a>
+        <a class="btn-secondary" href="{{ url_for('admin_export_xlsx', lab_slug=lab_slug) }}">Download Excel</a>
       </div>
     </div>
 
     <form class="card" method="post" action="{{ url_for('admin_reserve_slots', lab_slug=lab_slug) }}">
-      <h2>Admin quick booking: reserve slot(s)</h2>
+      <h2>Reserve slot(s)</h2>
       <div class="row">
-        <label>Name (optional)<input name="user_name" placeholder="ADMIN RESERVED" /></label>
-        <label>Email (optional)<input name="user_email" placeholder="{{ admin_username }}" /></label>
+        <label>Name (optional)<input name="user_name" placeholder="ADMIN RESERVED"/></label>
+        <label>Email (optional)<input name="user_email" placeholder="{{ admin_username }}"/></label>
       </div>
-      <label>Notes<input name="notes" placeholder="Reserved / maintenance / VIP booking..." /></label>
-
+      <label>Notes<input name="notes" placeholder="Maintenance, VIP booking…"/></label>
       <div class="card-inner">
-<div class="legend">
-          <span class="dot free"></span> Available (select one or more)
-          <span class="dot booked"></span> Booked
+        <div class="legend"><span class="dot free"></span> Available &nbsp; <span class="dot booked"></span> Booked</div>
+        {% for day in days %}
+          <h3 class="day-title">{{ day.date.strftime("%A, %d %b %Y") }}</h3>
+          <div class="slot-grid">
+            {% for s in day.slots %}
+              {% if s.free %}
+                <label class="slot slot-select free">
+                  <input type="checkbox" name="slot" value="{{ s.value }}"/>
+                  <div><div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Available</div></div>
+                </label>
+              {% else %}
+                <div class="slot booked"><div class="slot-time">{{ s.start }}–{{ s.end }}</div><div class="slot-state">Booked</div></div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endfor %}
       </div>
-
-      <h3 class="section">Or manual date/time (single slot)</h3>
+      <h3 class="section">Or manual date/time</h3>
       <div class="row">
-        <label>Date<input name="booking_date" type="date" /></label>
-        <label>Start time<input name="start_time" type="time" /></label>
-        <label>End time<input name="end_time" type="time" /></label>
+        <label>Date<input name="booking_date" type="date"/></label>
+        <label>Start<input name="start_time" type="time"/></label>
+        <label>End<input name="end_time" type="time"/></label>
       </div>
-
-      <div class="actions">
-        <button type="submit">Reserve</button>
-      </div>
+      <div class="actions"><button type="submit">Reserve</button></div>
     </form>
 
-    <div class="card">
-      <h2>Bookings</h2>
+    {% set pending_rows = rows | selectattr('status', 'equalto', 'pending') | list %}
+    {% if pending_rows %}
+      <div class="alert error" style="border-radius:14px;margin:0 0 4px 0;">
+        ⚠ {{ pending_rows|length }} booking(s) awaiting your approval.
+      </div>
+    {% endif %}
 
-      {% set pending_rows = rows | selectattr('status', 'equalto', 'pending') | list %}
-      {% if pending_rows %}
-        <div class="alert error" style="margin-bottom:14px;">
-          ⚠ {{ pending_rows|length }} booking(s) awaiting your approval.
+    <form class="card" method="post" action="{{ url_for('admin_bulk_action', lab_slug=lab_slug) }}" id="bulk-form">
+      <div class="card-header-row" style="margin-bottom:14px;">
+        <h2 style="margin:0;">Bookings</h2>
+        <div class="actions" style="margin:0;">
+          <select name="action" style="padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1220;color:var(--text);">
+            <option value="approve">Approve selected</option>
+            <option value="reject">Reject selected</option>
+          </select>
+          <button class="btn-approve" type="submit">Apply to selected</button>
         </div>
-      {% endif %}
+      </div>
+      <input type="hidden" name="bulk_reason" id="bulk-reason-field" value=""/>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>ID</th><th>Status</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th><th>Notes</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in rows %}
-            <tr class="{{ 'row-pending' if r.status == 'pending' else '' }}">
-              <td>{{ r.id }}</td>
-              <td>
-                {% if r.status == 'pending' %}
-                  <span class="badge badge-pending">Pending</span>
-                {% elif r.status == 'approved' %}
-                  <span class="badge badge-approved">Approved</span>
-                {% else %}
-                  <span class="badge badge-rejected">Rejected</span>
-                {% endif %}
-              </td>
-              <td>{{ r.booking_date }}</td>
-              <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
-              <td>{{ r.user_name }}</td>
-              <td>{{ r.user_email }}</td>
-              <td class="wrap">{{ r.notes }}</td>
-              <td>
-                <div class="row-actions">
-                  {% if r.status == 'pending' %}
-                    <form method="post" action="{{ url_for('admin_approve_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;">
-                      <button class="btn-approve" type="submit" title="Approve">✓ Approve</button>
-                    </form>
-                    <form method="post" action="{{ url_for('admin_reject_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;" class="reject-form" data-name="{{ r.user_name }}">
-                      <input type="hidden" name="reason" class="reject-reason-hidden" value=""/>
-                      <button class="btn-reject" type="submit" title="Reject">✗ Reject</button>
-                    </form>
-                  {% endif %}
-                  <a class="link" href="{{ url_for('admin_edit_booking', lab_slug=lab_slug, booking_id=r.id) }}">Edit</a>
-                  <form method="post" action="{{ url_for('admin_delete_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Delete this booking?');">
-                    <button class="btn-del" type="submit">Delete</button>
-                  </form>
-                </div>
-              </td>
+      <div style="overflow-x:auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="chk-all" title="Select all pending"/></th>
+              <th>ID</th><th>Status</th><th>Date</th><th>Time</th><th>Name</th><th>Email</th><th>Notes</th><th>Actions</th>
             </tr>
-          {% else %}
-            <tr><td colspan="8" class="empty">No bookings yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr class="{{ 'row-pending' if r.status == 'pending' else '' }}">
+                <td>{% if r.status == 'pending' %}<input type="checkbox" name="booking_ids" value="{{ r.id }}" class="chk-row"/>{% endif %}</td>
+                <td>{{ r.id }}</td>
+                <td>
+                  {% if r.status == 'pending' %}<span class="badge badge-pending">Pending</span>
+                  {% elif r.status == 'approved' %}<span class="badge badge-approved">Approved</span>
+                  {% else %}<span class="badge badge-rejected">Declined</span>{% endif %}
+                </td>
+                <td>{{ r.booking_date }}</td>
+                <td>{{ (r.start_time|string)[:5] }}–{{ (r.end_time|string)[:5] }}</td>
+                <td>{{ r.user_name }}</td>
+                <td>{{ r.user_email }}</td>
+                <td class="wrap">{{ r.notes }}</td>
+                <td>
+                  <div class="row-actions">
+                    {% if r.status == 'pending' %}
+                      <form method="post" action="{{ url_for('admin_approve_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;">
+                        <label style="display:block;color:var(--muted);font-size:12px;margin-bottom:3px;">Note (opt.)<input name="approval_note" style="font-size:12px;padding:4px 8px;margin-top:2px;" placeholder="Optional note"/></label>
+                        <button class="btn-approve" type="submit">✓ Approve</button>
+                      </form>
+                      <form method="post" action="{{ url_for('admin_reject_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;" class="reject-form" data-name="{{ r.user_name }}">
+                        <input type="hidden" name="reason" class="reject-reason-hidden" value=""/>
+                        <button class="btn-reject" type="submit">✗ Reject</button>
+                      </form>
+                    {% endif %}
+                    <a class="link" href="{{ url_for('admin_edit_booking', lab_slug=lab_slug, booking_id=r.id) }}">Edit</a>
+                    <form method="post" action="{{ url_for('admin_delete_booking', lab_slug=lab_slug, booking_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Delete booking #{{ r.id }}?');">
+                      <button class="btn-del" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="9" class="empty">No bookings yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
   </main>
 
-  <!-- Reject reason modal -->
-  <div id="reject-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:440px;width:90%;">
-      <h3 style="margin-top:0;">Reject booking</h3>
-      <p id="reject-modal-label" style="color:var(--muted);margin-bottom:10px;"></p>
-      <label>Reason (optional)<textarea id="reject-modal-reason" rows="3" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0f1220;color:var(--text);" placeholder="e.g. Equipment maintenance…"></textarea></label>
-      <div class="actions" style="margin-top:14px;">
-        <button id="reject-modal-confirm" class="btn-reject">Confirm rejection</button>
-        <button id="reject-modal-cancel" class="secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    let _activeForm = null;
-    document.querySelectorAll('.reject-form').forEach(form => {
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        _activeForm = form;
-        document.getElementById('reject-modal-label').textContent =
-          'Rejecting booking for: ' + form.dataset.name;
-        document.getElementById('reject-modal-reason').value = '';
-        const modal = document.getElementById('reject-modal');
-        modal.style.display = 'flex';
-      });
-    });
-    document.getElementById('reject-modal-confirm').addEventListener('click', function() {
-      if (_activeForm) {
-        _activeForm.querySelector('.reject-reason-hidden').value =
-          document.getElementById('reject-modal-reason').value;
-        document.getElementById('reject-modal').style.display = 'none';
-        _activeForm.submit();
-      }
-    });
-    document.getElementById('reject-modal-cancel').addEventListener('click', function() {
-      document.getElementById('reject-modal').style.display = 'none';
-      _activeForm = null;
-    });
-  </script>
+  {% include '_reject_modal.html' %}
+  {% include '_bulk_reject_modal.html' %}
+  {% include '_admin_scripts.html' %}
 </body>
 </html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Recurring Booking | {{ lab.title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="back" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">← {{ lab.title }}</a>
+      <h1>Recurring Booking</h1>
+      <p class="sub">{{ lab.title }} · Book the same time slot every week for up to 8 weeks.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="alerts">{% for cat,msg in messages %}<div class="alert {{ cat }}">{{ msg }}</div>{% endfor %}</div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post" novalidate>
+      <h2>Your details</h2>
+      <div class="row">
+        <label>Your name *
+          <input name="user_name" value="{{ form.get('user_name','') }}" required/>
+        </label>
+        <label>Email *
+          <input name="user_email" type="email" value="{{ form.get('user_email','') }}" required/>
+        </label>
+      </div>
+
+      <h2>Recurring slot</h2>
+      <p class="hint">Pick the first date and time. The same time will be booked on the same weekday for each following week.</p>
+      <div class="row">
+        <label>First date *
+          <input name="start_date" type="date" value="{{ form.get('start_date','') }}" required/>
+        </label>
+        <label>Start time *
+          <input name="start_time" type="time" value="{{ form.get('start_time','') }}" required/>
+        </label>
+        <label>End time *
+          <input name="end_time" type="time" value="{{ form.get('end_time','') }}" required/>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Number of weeks (1–8) *
+          <select name="weeks" style="width:100%;margin-top:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#0f1220;color:var(--text);">
+            {% for w in weeks_range %}
+              <option value="{{ w }}" {% if form.get('weeks')|int == w %}selected{% endif %}>{{ w }} week{% if w > 1 %}s{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <label>Notes / request
+        <textarea name="notes" rows="3">{{ form.get('notes','') }}</textarea>
+      </label>
+
+      <div class="actions">
+        <button type="submit">Submit recurring booking</button>
+        <a class="secondary" href="{{ url_for('lab_generic', lab_slug=lab.slug) }}">Single booking instead</a>
+      </div>
+      <p class="hint">Each week will be submitted as a separate pending booking. The admin will approve or decline each individually. Conflicts and weekends will be skipped.</p>
+    </form>
+  </main>
+</body>
+</html>
