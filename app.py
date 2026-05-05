@@ -30,7 +30,6 @@ USE_POSTGRES = DATABASE_URL.lower().startswith("postgres")
 
 if USE_POSTGRES:
     from psycopg2.pool import ThreadedConnectionPool
-    from openpyxl import Workbook
 
 APP_DIR     = os.path.abspath(os.path.dirname(__file__))
 SQLITE_PATH = os.path.join(APP_DIR, "bookings.sqlite3")
