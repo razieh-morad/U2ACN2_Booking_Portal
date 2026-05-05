@@ -15,10 +15,11 @@ from zoneinfo import ZoneInfo
 
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
-    session, abort, make_response
+    session, abort, make_response, jsonify
 )
 
 # ------------------------------------------------------------------ Config ---
+
 TZ = ZoneInfo(os.environ.get("APP_TZ", "Africa/Johannesburg"))
 WORKDAY_START = time(8, 0)
 WORKDAY_END   = time(16, 0)
@@ -29,8 +30,7 @@ USE_POSTGRES = DATABASE_URL.lower().startswith("postgres")
 
 if USE_POSTGRES:
     from psycopg2.pool import ThreadedConnectionPool
-
-from openpyxl import Workbook
+    from openpyxl import Workbook
 
 APP_DIR     = os.path.abspath(os.path.dirname(__file__))
 SQLITE_PATH = os.path.join(APP_DIR, "bookings.sqlite3")
@@ -42,6 +42,7 @@ _pg_pool: "ThreadedConnectionPool|None" = None
 _db_initialized = False
 
 # -------------------------------------------------------------------- Labs ---
+
 LABS: Dict[str, Dict[str, Any]] = {
     "furnace": {
         "title": "Nanomaterials Furnace (Carbonate Furnace)",
@@ -57,19 +58,20 @@ LABS: Dict[str, Dict[str, Any]] = {
         "max_days_ahead": 30,
         "max_duration_hours": 8,
     },
-    "manual-drying-oven":          {"title": "Manual drying oven",          "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "automated-drying-oven":       {"title": "Automated drying oven",       "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "sputtering":                  {"title": "Sputtering",                  "subtitle": "Thin films / coatings","min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "auto-lab":                    {"title": "Auto lab",                    "subtitle": "Automated workflows",  "min_notice_hours": 4,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "uv-vis-currie-500":           {"title": "UV-Vis Currie 500",           "subtitle": "Optical spectroscopy", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "centrifuge":                  {"title": "Centrifuge",                  "subtitle": "Sample separation",    "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "pelletizer":                  {"title": "Pelletizer",                  "subtitle": "Pellet pressing",      "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "thermal-conductivity-system": {"title": "Thermal conductivity system", "subtitle": "Thermal transport",    "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "freeze-dryer":                {"title": "Freeze dryer",                "subtitle": "Lyophilization",       "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "spin-coater":                 {"title": "Spin coater",                 "subtitle": "Thin film deposition", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "manual-drying-oven":    {"title": "Manual drying oven",          "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "automated-drying-oven": {"title": "Automated drying oven",       "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "sputtering":            {"title": "Sputtering",                   "subtitle": "Thin films / coatings","min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "auto-lab":              {"title": "Auto lab",                     "subtitle": "Automated workflows",  "min_notice_hours": 4,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "uv-vis-currie-500":     {"title": "UV-Vis Currie 500",            "subtitle": "Optical spectroscopy", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "centrifuge":            {"title": "Centrifuge",                   "subtitle": "Sample separation",    "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "pelletizer":            {"title": "Pelletizer",                   "subtitle": "Pellet pressing",      "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "thermal-conductivity-system": {"title": "Thermal conductivity system", "subtitle": "Thermal transport", "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "freeze-dryer":          {"title": "Freeze dryer",                 "subtitle": "Lyophilization",       "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "spin-coater":           {"title": "Spin coater",                  "subtitle": "Thin film deposition", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
 }
 
 # -------------------------------------------------------- Per-lab admins ----
+
 def _env_slug(slug: str) -> str:
     return slug.upper().replace("-", "_").replace(" ", "_")
 
@@ -81,91 +83,102 @@ for _slug in LABS.keys():
         "password": os.environ.get(f"ADMIN_{_key}_PASSWORD", "").strip(),
     }
 
+# ------------------------------------------------ Chemical inventory admin --
+CHEM_ADMIN_EMAIL    = os.environ.get("CHEM_ADMIN_EMAIL", "").strip()
+CHEM_ADMIN_PASSWORD = os.environ.get("CHEM_ADMIN_PASSWORD", "admin123").strip()
+
+# Purchase request notification recipients (comma-separated emails)
+PURCHASE_NOTIFY_EMAILS = [
+    e.strip() for e in os.environ.get("PURCHASE_NOTIFY_EMAILS", CHEM_ADMIN_EMAIL).split(",")
+    if e.strip()
+]
+
 # --------------------------------------------------------- SMTP (shared) ----
+
 SMTP_HOST      = os.environ.get("SMTP_HOST",      "").strip()
 SMTP_PORT      = int(os.environ.get("SMTP_PORT",  "587"))
 SMTP_USE_TLS   = os.environ.get("SMTP_USE_TLS",   "true").lower() in ("1","true","yes","y")
-SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Booking Portal")
+SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Portal")
 SMTP_USER      = os.environ.get("SMTP_USER",      "").strip()
 SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD",  "").strip()
 
 def smtp_ready() -> bool:
     return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
-def smtp_ready_for_lab(_: str) -> bool:
-    return smtp_ready()
+# ============================================================= DB SCHEMA ====
 
-# ---------------------------------------------------------- DB schema --------
+# ------------- Booking columns (unchanged) ----------------------------------
+
 PG_COLUMNS = {
-    "lab_slug":             "TEXT NOT NULL",
-    "booking_group_id":     "TEXT",
-    "user_name":            "TEXT NOT NULL",
-    "user_email":           "TEXT NOT NULL",
-    "nanomaterial_type":    "TEXT",
-    "melting_point":        "TEXT",
-    "material_density":     "TEXT",
-    "anneal_temp_c":        "TEXT",
-    "anneal_time_h":        "TEXT",
-    "gas_type":             "TEXT",
-    "pressure":             "TEXT",
-    "vacuum":               "BOOLEAN NOT NULL DEFAULT FALSE",
-    "sample_name":          "TEXT",
-    "sample_count":         "INTEGER",
-    "elements_of_interest": "TEXT",
-    "analysis_type":        "TEXT",
-    "charge_neutralizer":   "BOOLEAN NOT NULL DEFAULT FALSE",
-    "mounting_method":      "TEXT",
-    "outgassing_risk":      "TEXT",
-    "notes":                "TEXT",
-    "booking_date":         "DATE NOT NULL",
-    "start_time":           "TIME NOT NULL",
-    "end_time":             "TIME NOT NULL",
-    "created_at":           "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
-    "updated_at":           "TIMESTAMPTZ",
-    "updated_by":           "TEXT",
-    "status":               "TEXT NOT NULL DEFAULT 'pending'",
-    "approval_token":       "TEXT",
-    "rejection_reason":     "TEXT",
-    "approval_note":        "TEXT",
-    "cancel_token":         "TEXT",
-    "cancelled_at":         "TIMESTAMPTZ",
-    "reminder_sent":        "BOOLEAN NOT NULL DEFAULT FALSE",
+    "lab_slug":              "TEXT NOT NULL",
+    "booking_group_id":      "TEXT",
+    "user_name":             "TEXT NOT NULL",
+    "user_email":            "TEXT NOT NULL",
+    "nanomaterial_type":     "TEXT",
+    "melting_point":         "TEXT",
+    "material_density":      "TEXT",
+    "anneal_temp_c":         "TEXT",
+    "anneal_time_h":         "TEXT",
+    "gas_type":              "TEXT",
+    "pressure":              "TEXT",
+    "vacuum":                "BOOLEAN NOT NULL DEFAULT FALSE",
+    "sample_name":           "TEXT",
+    "sample_count":          "INTEGER",
+    "elements_of_interest":  "TEXT",
+    "analysis_type":         "TEXT",
+    "charge_neutralizer":    "BOOLEAN NOT NULL DEFAULT FALSE",
+    "mounting_method":       "TEXT",
+    "outgassing_risk":       "TEXT",
+    "notes":                 "TEXT",
+    "booking_date":          "DATE NOT NULL",
+    "start_time":            "TIME NOT NULL",
+    "end_time":              "TIME NOT NULL",
+    "created_at":            "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+    "updated_at":            "TIMESTAMPTZ",
+    "updated_by":            "TEXT",
+    "status":                "TEXT NOT NULL DEFAULT 'pending'",
+    "approval_token":        "TEXT",
+    "rejection_reason":      "TEXT",
+    "approval_note":         "TEXT",
+    "cancel_token":          "TEXT",
+    "cancelled_at":          "TIMESTAMPTZ",
+    "reminder_sent":         "BOOLEAN NOT NULL DEFAULT FALSE",
 }
 
 SQLITE_COLUMNS = {
-    "lab_slug":             "TEXT NOT NULL",
-    "booking_group_id":     "TEXT",
-    "user_name":            "TEXT NOT NULL",
-    "user_email":           "TEXT NOT NULL",
-    "nanomaterial_type":    "TEXT",
-    "melting_point":        "TEXT",
-    "material_density":     "TEXT",
-    "anneal_temp_c":        "TEXT",
-    "anneal_time_h":        "TEXT",
-    "gas_type":             "TEXT",
-    "pressure":             "TEXT",
-    "vacuum":               "INTEGER NOT NULL DEFAULT 0",
-    "sample_name":          "TEXT",
-    "sample_count":         "INTEGER",
-    "elements_of_interest": "TEXT",
-    "analysis_type":        "TEXT",
-    "charge_neutralizer":   "INTEGER NOT NULL DEFAULT 0",
-    "mounting_method":      "TEXT",
-    "outgassing_risk":      "TEXT",
-    "notes":                "TEXT",
-    "booking_date":         "TEXT NOT NULL",
-    "start_time":           "TEXT NOT NULL",
-    "end_time":             "TEXT NOT NULL",
-    "created_at":           "TEXT NOT NULL",
-    "updated_at":           "TEXT",
-    "updated_by":           "TEXT",
-    "status":               "TEXT NOT NULL DEFAULT 'pending'",
-    "approval_token":       "TEXT",
-    "rejection_reason":     "TEXT",
-    "approval_note":        "TEXT",
-    "cancel_token":         "TEXT",
-    "cancelled_at":         "TEXT",
-    "reminder_sent":        "INTEGER NOT NULL DEFAULT 0",
+    "lab_slug":              "TEXT NOT NULL",
+    "booking_group_id":      "TEXT",
+    "user_name":             "TEXT NOT NULL",
+    "user_email":            "TEXT NOT NULL",
+    "nanomaterial_type":     "TEXT",
+    "melting_point":         "TEXT",
+    "material_density":      "TEXT",
+    "anneal_temp_c":         "TEXT",
+    "anneal_time_h":         "TEXT",
+    "gas_type":              "TEXT",
+    "pressure":              "TEXT",
+    "vacuum":                "INTEGER NOT NULL DEFAULT 0",
+    "sample_name":           "TEXT",
+    "sample_count":          "INTEGER",
+    "elements_of_interest":  "TEXT",
+    "analysis_type":         "TEXT",
+    "charge_neutralizer":    "INTEGER NOT NULL DEFAULT 0",
+    "mounting_method":       "TEXT",
+    "outgassing_risk":       "TEXT",
+    "notes":                 "TEXT",
+    "booking_date":          "TEXT NOT NULL",
+    "start_time":            "TEXT NOT NULL",
+    "end_time":              "TEXT NOT NULL",
+    "created_at":            "TEXT NOT NULL",
+    "updated_at":            "TEXT",
+    "updated_by":            "TEXT",
+    "status":                "TEXT NOT NULL DEFAULT 'pending'",
+    "approval_token":        "TEXT",
+    "rejection_reason":      "TEXT",
+    "approval_note":         "TEXT",
+    "cancel_token":          "TEXT",
+    "cancelled_at":          "TEXT",
+    "reminder_sent":         "INTEGER NOT NULL DEFAULT 0",
 }
 
 EXPORT_COLUMNS = [
@@ -179,6 +192,7 @@ EXPORT_COLUMNS = [
 ]
 
 # ------------------------------------------------------------- DB helpers ----
+
 def _init_pg_pool():
     global _pg_pool
     if _pg_pool is None:
@@ -198,6 +212,55 @@ def _migrate_postgres(cur):
         cur.execute(f'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "{col}" {ddl};')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
 
+    # Chemical inventory tables
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chemicals (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            formula TEXT DEFAULT '',
+            mw TEXT DEFAULT '',
+            cas_no TEXT DEFAULT '',
+            supplier TEXT DEFAULT '',
+            amount TEXT DEFAULT '',
+            expiry_date TEXT DEFAULT '',
+            storage_group TEXT DEFAULT '',
+            location TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            reserved_for TEXT DEFAULT '',
+            reserved_label TEXT DEFAULT ''
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chemical_requests (
+            id SERIAL PRIMARY KEY,
+            chem_id INTEGER NOT NULL REFERENCES chemicals(id),
+            first_name TEXT NOT NULL,
+            surname TEXT NOT NULL,
+            requester_email TEXT NOT NULL,
+            quantity TEXT NOT NULL,
+            purpose TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS purchase_requests (
+            id SERIAL PRIMARY KEY,
+            material_name TEXT NOT NULL,
+            formula TEXT DEFAULT '',
+            cas_number TEXT DEFAULT '',
+            specifications TEXT DEFAULT '',
+            amount TEXT NOT NULL,
+            unit TEXT NOT NULL,
+            requester_first_name TEXT NOT NULL,
+            requester_surname TEXT NOT NULL,
+            requester_email TEXT NOT NULL,
+            comments TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+
 def _sqlite_existing_columns(conn: sqlite3.Connection) -> set:
     return {r[1] for r in conn.execute("PRAGMA table_info(bookings);").fetchall()}
 
@@ -208,6 +271,55 @@ def _migrate_sqlite(conn: sqlite3.Connection):
         if col not in existing:
             conn.execute(f"ALTER TABLE bookings ADD COLUMN {col} {ddl};")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
+
+    # Chemical inventory tables
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chemicals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            formula TEXT DEFAULT '',
+            mw TEXT DEFAULT '',
+            cas_no TEXT DEFAULT '',
+            supplier TEXT DEFAULT '',
+            amount TEXT DEFAULT '',
+            expiry_date TEXT DEFAULT '',
+            storage_group TEXT DEFAULT '',
+            location TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            reserved_for TEXT DEFAULT '',
+            reserved_label TEXT DEFAULT ''
+        );
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chemical_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chem_id INTEGER NOT NULL,
+            first_name TEXT NOT NULL,
+            surname TEXT NOT NULL,
+            requester_email TEXT NOT NULL,
+            quantity TEXT NOT NULL,
+            purpose TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL
+        );
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS purchase_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            material_name TEXT NOT NULL,
+            formula TEXT DEFAULT '',
+            cas_number TEXT DEFAULT '',
+            specifications TEXT DEFAULT '',
+            amount TEXT NOT NULL,
+            unit TEXT NOT NULL,
+            requester_first_name TEXT NOT NULL,
+            requester_surname TEXT NOT NULL,
+            requester_email TEXT NOT NULL,
+            comments TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL
+        );
+    """)
 
 def init_db():
     global _db_initialized
@@ -228,20 +340,510 @@ def init_db():
         conn.commit()
         conn.close()
     _db_initialized = True
+    _seed_chemicals()
 
-# ------------------------------------------------------- General helpers ----
+# ================================================ Chemical DB helpers =======
+
+def _chem_conn():
+    """Return a sqlite3 connection (for non-PG deployments)."""
+    c = sqlite3.connect(SQLITE_PATH)
+    c.row_factory = sqlite3.Row
+    return c
+
+def _get_chemicals_all() -> List[Dict]:
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM chemicals ORDER BY name ASC")
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = _chem_conn()
+        rows = conn.execute("SELECT * FROM chemicals ORDER BY name ASC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def _search_chemicals(q: str) -> List[Dict]:
+    q_like = f"%{q}%"
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM chemicals WHERE LOWER(name) LIKE LOWER(%s) OR LOWER(formula) LIKE LOWER(%s) ORDER BY name ASC",
+                    (q_like, q_like))
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = _chem_conn()
+        rows = conn.execute(
+            "SELECT * FROM chemicals WHERE LOWER(name) LIKE LOWER(?) OR LOWER(formula) LIKE LOWER(?) ORDER BY name ASC",
+            (q_like, q_like)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def _get_chemical_by_id(chem_id: int) -> Optional[Dict]:
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM chemicals WHERE id=%s", (chem_id,))
+                row = cur.fetchone()
+                if not row: return None
+                return dict(zip([d.name for d in cur.description], row))
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = _chem_conn()
+        row = conn.execute("SELECT * FROM chemicals WHERE id=?", (chem_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+def _upsert_chemical(data: Dict) -> int:
+    """Insert or update a chemical by name. Returns id."""
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM chemicals WHERE LOWER(name)=LOWER(%s)", (data["name"],))
+                row = cur.fetchone()
+                if row:
+                    cid = row[0]
+                    cur.execute("""UPDATE chemicals SET formula=%s,mw=%s,cas_no=%s,supplier=%s,
+                        amount=%s,expiry_date=%s,storage_group=%s,location=%s,notes=%s,
+                        reserved_for=%s,reserved_label=%s WHERE id=%s""",
+                        (data.get("formula",""), data.get("mw",""), data.get("cas_no",""),
+                         data.get("supplier",""), data.get("amount",""), data.get("expiry_date",""),
+                         data.get("storage_group",""), data.get("location",""), data.get("notes",""),
+                         data.get("reserved_for",""), data.get("reserved_label",""), cid))
+                else:
+                    cur.execute("""INSERT INTO chemicals (name,formula,mw,cas_no,supplier,amount,
+                        expiry_date,storage_group,location,notes,reserved_for,reserved_label)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                        (data["name"], data.get("formula",""), data.get("mw",""), data.get("cas_no",""),
+                         data.get("supplier",""), data.get("amount",""), data.get("expiry_date",""),
+                         data.get("storage_group",""), data.get("location",""), data.get("notes",""),
+                         data.get("reserved_for",""), data.get("reserved_label","")))
+                    cid = cur.fetchone()[0]
+                conn.commit()
+                return cid
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cur = conn.cursor()
+        row = cur.execute("SELECT id FROM chemicals WHERE LOWER(name)=LOWER(?)", (data["name"],)).fetchone()
+        if row:
+            cid = row[0]
+            cur.execute("""UPDATE chemicals SET formula=?,mw=?,cas_no=?,supplier=?,amount=?,
+                expiry_date=?,storage_group=?,location=?,notes=?,reserved_for=?,reserved_label=?
+                WHERE id=?""",
+                (data.get("formula",""), data.get("mw",""), data.get("cas_no",""),
+                 data.get("supplier",""), data.get("amount",""), data.get("expiry_date",""),
+                 data.get("storage_group",""), data.get("location",""), data.get("notes",""),
+                 data.get("reserved_for",""), data.get("reserved_label",""), cid))
+        else:
+            cur.execute("""INSERT INTO chemicals (name,formula,mw,cas_no,supplier,amount,
+                expiry_date,storage_group,location,notes,reserved_for,reserved_label)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (data["name"], data.get("formula",""), data.get("mw",""), data.get("cas_no",""),
+                 data.get("supplier",""), data.get("amount",""), data.get("expiry_date",""),
+                 data.get("storage_group",""), data.get("location",""), data.get("notes",""),
+                 data.get("reserved_for",""), data.get("reserved_label","")))
+            cid = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return cid
+
+def _delete_chemical(chem_id: int):
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM chemicals WHERE id=%s", (chem_id,))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("DELETE FROM chemicals WHERE id=?", (chem_id,))
+        conn.commit()
+        conn.close()
+
+def _add_chemical_request(chem_id: int, first_name: str, surname: str,
+                           email: str, quantity: str, purpose: str) -> int:
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""INSERT INTO chemical_requests
+                    (chem_id,first_name,surname,requester_email,quantity,purpose,status,created_at)
+                    VALUES(%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id""",
+                    (chem_id, first_name.strip(), surname.strip(), email.strip(),
+                     quantity.strip(), purpose.strip()))
+                rid = cur.fetchone()[0]
+            conn.commit()
+            return rid
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO chemical_requests
+            (chem_id,first_name,surname,requester_email,quantity,purpose,status,created_at)
+            VALUES(?,?,?,?,?,?,'pending',?)""",
+            (chem_id, first_name.strip(), surname.strip(), email.strip(),
+             quantity.strip(), purpose.strip(), now))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+def _list_chemical_requests(status: Optional[str] = None) -> List[Dict]:
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                if status:
+                    cur.execute("""SELECT cr.*,c.name as chem_name,c.formula,c.cas_no
+                        FROM chemical_requests cr JOIN chemicals c ON cr.chem_id=c.id
+                        WHERE cr.status=%s ORDER BY cr.id DESC""", (status,))
+                else:
+                    cur.execute("""SELECT cr.*,c.name as chem_name,c.formula,c.cas_no
+                        FROM chemical_requests cr JOIN chemicals c ON cr.chem_id=c.id
+                        ORDER BY cr.id DESC""")
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        if status:
+            rows = conn.execute("""SELECT cr.*,c.name as chem_name,c.formula,c.cas_no
+                FROM chemical_requests cr JOIN chemicals c ON cr.chem_id=c.id
+                WHERE cr.status=? ORDER BY cr.id DESC""", (status,)).fetchall()
+        else:
+            rows = conn.execute("""SELECT cr.*,c.name as chem_name,c.formula,c.cas_no
+                FROM chemical_requests cr JOIN chemicals c ON cr.chem_id=c.id
+                ORDER BY cr.id DESC""").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def _set_chemical_request_status(req_id: int, status: str):
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE chemical_requests SET status=%s WHERE id=%s", (status, req_id))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("UPDATE chemical_requests SET status=? WHERE id=?", (status, req_id))
+        conn.commit()
+        conn.close()
+
+def _add_purchase_request(data: Dict) -> int:
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""INSERT INTO purchase_requests
+                    (material_name,formula,cas_number,specifications,amount,unit,
+                     requester_first_name,requester_surname,requester_email,comments,status,created_at)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW()) RETURNING id""",
+                    (data["material_name"], data.get("formula",""), data.get("cas_number",""),
+                     data.get("specifications",""), data["amount"], data["unit"],
+                     data["requester_first_name"], data["requester_surname"],
+                     data["requester_email"], data.get("comments","")))
+                rid = cur.fetchone()[0]
+            conn.commit()
+            return rid
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO purchase_requests
+            (material_name,formula,cas_number,specifications,amount,unit,
+             requester_first_name,requester_surname,requester_email,comments,status,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,'pending',?)""",
+            (data["material_name"], data.get("formula",""), data.get("cas_number",""),
+             data.get("specifications",""), data["amount"], data["unit"],
+             data["requester_first_name"], data["requester_surname"],
+             data["requester_email"], data.get("comments",""), now))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+def _list_purchase_requests(status: Optional[str] = None) -> List[Dict]:
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                if status:
+                    cur.execute("SELECT * FROM purchase_requests WHERE status=%s ORDER BY id DESC", (status,))
+                else:
+                    cur.execute("SELECT * FROM purchase_requests ORDER BY id DESC")
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        if status:
+            rows = conn.execute("SELECT * FROM purchase_requests WHERE status=? ORDER BY id DESC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM purchase_requests ORDER BY id DESC").fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def _set_purchase_request_status(req_id: int, status: str):
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE purchase_requests SET status=%s WHERE id=%s", (status, req_id))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("UPDATE purchase_requests SET status=? WHERE id=?", (status, req_id))
+        conn.commit()
+        conn.close()
+
+# -------------------------------------------------- Seed chemicals from CSV --
+
+CHEMICALS_SEED = [
+    {"name": "Aluminium Oxide", "formula": "AlO", "mw": "101.96", "cas_no": "1344-28-1", "supplier": "Goodfellow", "amount": "1 kg", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Aluminium Nitrate", "formula": "Al(NO3)3·9H2O", "mw": "375.13", "cas_no": "7784-27-2", "supplier": "Sigma/Merck", "amount": "500 g", "expiry_date": "28-02-2010", "storage_group": "Oxidizer"},
+    {"name": "Aluminium Chloride hexahydrate", "formula": "AlCl3·6H2O", "mw": "241.45", "cas_no": "7784-13-6", "supplier": "Merck", "amount": "500 g", "expiry_date": "28-02-2010", "storage_group": "Corrosive"},
+    {"name": "Ammonium Fluoride", "formula": "NH4F", "mw": "37.04", "cas_no": "12125-01-08", "supplier": "---", "amount": "500 g", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Ammonium Chloride", "formula": "NH4Cl", "mw": "53.49", "cas_no": "12125-02-09", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": ""},
+    {"name": "Ammonium Hydrogen Carbonate", "formula": "NH4HCO3", "mw": "79.06", "cas_no": "1066-33-7", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Barium Nitrite", "formula": "Ba(NO2)2", "mw": "229.34", "cas_no": "13465-94-6", "supplier": "Mirena", "amount": "---", "expiry_date": "01-06-2026", "storage_group": "Oxidizer/Toxic"},
+    {"name": "Borane Ammonia Complex", "formula": "BH3NH3", "mw": "30.87", "cas_no": "13774-81-7", "supplier": "Arich Chem", "amount": "---", "expiry_date": "---", "storage_group": "Flammable"},
+    {"name": "Boric Acid", "formula": "H3BO3", "mw": "61.83", "cas_no": "10043-35-3", "supplier": "Sigma Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Brilliant Blue R", "formula": "C45H44N3NaO7S2", "mw": "825.97", "cas_no": "6104-59-2", "supplier": "Sigma", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Cadmium Chloride hydrate", "formula": "CdCl2·xH2O", "mw": "183.32", "cas_no": "10108-64-2", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Cadmium Fluoride", "formula": "CdF2", "mw": "150.4", "cas_no": "7790-79-6", "supplier": "Fluka", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Cadmium Nitrate Tetrahydrate", "formula": "Cd(NO3)2·4H2O", "mw": "308.47", "cas_no": "10022-68-1", "supplier": "Fluka", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Calcium Carbonate", "formula": "CaCO3", "mw": "100.09", "cas_no": "471-34-1", "supplier": "SRL", "amount": "", "expiry_date": "01-06-2028", "storage_group": "General"},
+    {"name": "Calcium Iodide Tetrahydrate", "formula": "CaI2·4H2O", "mw": "365.95", "cas_no": "10102-68-8", "supplier": "SRL", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Carboxymethyl Cellulose Sodium", "formula": "Polymer", "mw": "0", "cas_no": "9004-32-4", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Cobalt(II) Nitrate", "formula": "Co(NO3)2·6H2O", "mw": "291.03", "cas_no": "10026-22-9", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Cobalt(II) Sulfate Heptahydrate", "formula": "CoSO4·7H2O", "mw": "281.1", "cas_no": "10026-24-1", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Congo Red", "formula": "C32H22N6Na2O6S2", "mw": "696.66", "cas_no": "573-58-0", "supplier": "SRL", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Copper(II) Nitrate", "formula": "Cu(NO3)2·3H2O", "mw": "241.6", "cas_no": "10031-43-3", "supplier": "Sigma/SRL", "amount": "", "expiry_date": "04/2021", "storage_group": "Oxidizer"},
+    {"name": "Copper(II) Oxide", "formula": "CuO", "mw": "79.55", "cas_no": "1317-38-0", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Copper Phthalocyanine", "formula": "Pigment Blue 15", "mw": "576.08", "cas_no": "147-14-8", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Copper(II) Sulfate", "formula": "CuSO4", "mw": "159.6", "cas_no": "231-967-6", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Cupferron", "formula": "C6H9N3O2", "mw": "155.16", "cas_no": "135-20-6", "supplier": "Fluka", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Chromium(III) Chloride Hexahydrate", "formula": "CrCl3·6H2O", "mw": "266.45", "cas_no": "10060-12-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Tri-Calcium Phosphate", "formula": "Ca3(PO4)2", "mw": "", "cas_no": "7758-87-4", "supplier": "Saarchem", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Chromium(III) Potassium Sulfate Dodecahydrate", "formula": "CrK(SO4)2·12H2O", "mw": "499.4", "cas_no": "7788-99-0", "supplier": "Sigma Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Copper(II) Perchlorate Hexahydrate", "formula": "Cu(ClO4)2·6H2O", "mw": "370.54", "cas_no": "10294-46-9", "supplier": "Sigma Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Dopamine Hydrochloride", "formula": "C8H11NO2·HCl", "mw": "189.64", "cas_no": "62-31-7", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Dodecarbonyltriron", "formula": "Fe3(CO)12", "mw": "503.66", "cas_no": "17685-52-8", "supplier": "Alfa Aesar", "amount": "10 g", "expiry_date": "---", "storage_group": "Flammable"},
+    {"name": "Ferric Chloride", "formula": "FeCl3·6H2O", "mw": "270.3", "cas_no": "10025-77-1", "supplier": "M&B Laboratory", "amount": "", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Ferrocene", "formula": "Fe(C5H5)2", "mw": "186.03", "cas_no": "102-54-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Hexamethylenetetramine", "formula": "C6H12N4", "mw": "140.19", "cas_no": "100-97-0", "supplier": "Merck", "amount": "200 g", "expiry_date": "---", "storage_group": "Flammable"},
+    {"name": "Iodine", "formula": "I2", "mw": "253.81", "cas_no": "7553-56-2", "supplier": "Sichem", "amount": "100 g", "expiry_date": "---", "storage_group": "Corrosive/Toxic"},
+    {"name": "Lysine", "formula": "C6H14N2O2", "mw": "146.19", "cas_no": "56-87-1", "supplier": "Sigma", "amount": "150 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Magnesium Carbonate", "formula": "Mg(CO3)", "mw": "84.31", "cas_no": "546-93-0", "supplier": "Sirchem", "amount": "500 g", "expiry_date": "09/2023", "storage_group": "General"},
+    {"name": "Magnesium Oxide", "formula": "MgO", "mw": "40.3", "cas_no": "1309-48-4", "supplier": "Sigma", "amount": "--", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Magnesium Sulphate", "formula": "MgSO4", "mw": "120.37", "cas_no": "7487-88-9", "supplier": "Merck", "amount": "500 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Mercury Acetate", "formula": "Hg(CH3COO)2", "mw": "318.68", "cas_no": "1600-27-7", "supplier": "Sigma Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Mesitylenesulfonyl Chloride", "formula": "C9H11ClO2S", "mw": "218.7", "cas_no": "773-64-8", "supplier": "Fluka", "amount": "--", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Methyl Orange", "formula": "C14H14N3NaO3S", "mw": "327.34", "cas_no": "547-58-0", "supplier": "Sirchem", "amount": "200 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Methylene Blue Hydrate", "formula": "C16H18ClN3S", "mw": "319.85", "cas_no": "122965-43-9", "supplier": "Sigma", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Nickel(II) Oxide", "formula": "NiO", "mw": "74.69", "cas_no": "1313-99-1", "supplier": "Sigma", "amount": "100 g", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Nickel(II) Sulphate", "formula": "NiSO4·7H2O", "mw": "280.86", "cas_no": "10101-98-1", "supplier": "---", "amount": "---", "expiry_date": "06/2006", "storage_group": "Health Haz"},
+    {"name": "Octadecane", "formula": "CH3(CH2)16CH3", "mw": "254.49", "cas_no": "593-45-3", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Oxalic Acid", "formula": "C2H2O4·2H2O", "mw": "126.07", "cas_no": "6153-56-6", "supplier": "Hopkins & Williams", "amount": "500 g", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "DL-Phenylalanine", "formula": "C9H11NO2", "mw": "165.19", "cas_no": "150-30-1", "supplier": "---", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Ruthenium Powder", "formula": "Ru", "mw": "101.07", "cas_no": "7440-18-8", "supplier": "Goodfellow", "amount": "10 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Self-Indicating Silica Gel", "formula": "SiO2", "mw": "60.08", "cas_no": "112926-00-8", "supplier": "Ager Scientific LDT", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Silver Nitrate", "formula": "AgNO3", "mw": "169.87", "cas_no": "7761-88-8", "supplier": "Merck", "amount": "---", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Sodium Acetate Trihydrate", "formula": "CH3COONa·3H2O", "mw": "136.08", "cas_no": "6131-90-4", "supplier": "Alfa Aesar", "amount": "--", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Cacodylate", "formula": "C2H6AsNaO2·3H2O", "mw": "214.03", "cas_no": "---", "supplier": "Electron Microscopy", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Sodium Chloride", "formula": "NaCl", "mw": "58.44", "cas_no": "7647-14-5", "supplier": "Associated Chemical Enterprise", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Citrate Monobasic", "formula": "NaH2C6H5O7", "mw": "214.11", "cas_no": "18996-35-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Dodecyl Sulfate", "formula": "C12H25NaO4S", "mw": "288.38", "cas_no": "151-21-3", "supplier": "Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Irritant"},
+    {"name": "Sodium Hydroxide", "formula": "NaOH", "mw": "40", "cas_no": "1310-73-2", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Sodium Hypophosphite", "formula": "NaH2PO2·H2O", "mw": "105.99", "cas_no": "---", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Iodide", "formula": "NaI", "mw": "149.89", "cas_no": "7681-82-5", "supplier": "Sirchem", "amount": "---", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Lauryl Sulphate", "formula": "C12H25NaO4S", "mw": "288.38", "cas_no": "151-21-3", "supplier": "Merck", "amount": "", "expiry_date": "---", "storage_group": "Irritant"},
+    {"name": "Sodium Molybdate", "formula": "Na2MoO4·2H2O", "mw": "241.95", "cas_no": "10102-40-6", "supplier": "Riedel-de-Haen", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Nitrate", "formula": "NaNO3", "mw": "84.99", "cas_no": "7631-99-4", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Sodium Nano Powder", "formula": "Na", "mw": "22.99", "cas_no": "7440-23-5", "supplier": "Nano Shel UK", "amount": "", "expiry_date": "---", "storage_group": "Water-React"},
+    {"name": "Sodium Persulfate", "formula": "Na2S2O8", "mw": "238.1", "cas_no": "7775-27-1", "supplier": "Sigma/Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Sodium Sulphate", "formula": "Na2SO4", "mw": "142.04", "cas_no": "7757-82-6", "supplier": "Siso Research", "amount": "", "expiry_date": "03/2028", "storage_group": "General"},
+    {"name": "Sodium Tetraborate", "formula": "Na2B4O7·10H2O", "mw": "381.37", "cas_no": "1303-96-4", "supplier": "British Drug Houses", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Sodium Tripolyphosphate", "formula": "Na5P3O10", "mw": "367.86", "cas_no": "7758-29-4", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Stannous Chloride", "formula": "SnCl2·2H2O", "mw": "225.65", "cas_no": "10025-69-1", "supplier": "SRLCHEM", "amount": "", "expiry_date": "05/2028", "storage_group": "Corrosive"},
+    {"name": "Strontium Nitrate", "formula": "Sr(NO3)2", "mw": "211.63", "cas_no": "10042-76-9", "supplier": "Saarchem", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
+    {"name": "Tetrabutylammonium Perchlorate", "formula": "C16H36ClNO4", "mw": "341.91", "cas_no": "1923-70-2", "supplier": "Sigma Aldrich", "amount": "100 g", "expiry_date": "", "storage_group": "Oxidizer"},
+    {"name": "Thallium(I) Sulfate", "formula": "Tl2SO4", "mw": "504.83", "cas_no": "7446-18-6", "supplier": "Analar", "amount": "25 g", "expiry_date": "---", "storage_group": "Toxic"},
+    {"name": "Thiourea", "formula": "CH4N2S", "mw": "76.12", "cas_no": "62-56-6", "supplier": "Sigma", "amount": "250 g", "expiry_date": "---", "storage_group": "Health Haz"},
+    {"name": "Tin(IV) Chloride", "formula": "SnCl4", "mw": "350.6", "cas_no": "10026-06-09", "supplier": "Sigma", "amount": "5 g", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Tin(IV) Oxide", "formula": "SnO2", "mw": "150.71", "cas_no": "18282-10-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Titanium(IV) Oxide", "formula": "TiO2", "mw": "79.87", "cas_no": "1317-70-0", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Titanium Nitride", "formula": "TiN", "mw": "61.87", "cas_no": "25583-20-4", "supplier": "Aldrich", "amount": "25 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Tris(hydroxymethyl)aminomethane", "formula": "C4H11NO3", "mw": "121.14", "cas_no": "77-86-1", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Urea", "formula": "NH2CONH2", "mw": "60.06", "cas_no": "57-13-6", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Zinc Fluoride", "formula": "ZnF2", "mw": "103.37", "cas_no": "7783-49-5", "supplier": "Aldrich", "amount": "100 g", "expiry_date": "---", "storage_group": "Corrosive"},
+    {"name": "Zinc Iodide", "formula": "ZnI2", "mw": "319.22", "cas_no": "10139-47-6", "supplier": "Aldrich", "amount": "--", "expiry_date": "---", "storage_group": "General"},
+    {"name": "Zinc Nitride", "formula": "Zn3N2", "mw": "224.15", "cas_no": "1313-49-1", "supplier": "Alfa Aesar", "amount": "10 g", "expiry_date": "---", "storage_group": "Water-React"},
+    {"name": "Zinc Phthalocyanine", "formula": "C32H16N8Zn", "mw": "577.91", "cas_no": "14320-04-08", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
+]
+
+def _seed_chemicals():
+    """Seed the chemicals table if empty."""
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM chemicals")
+                if cur.fetchone()[0] > 0:
+                    return
+            for c in CHEMICALS_SEED:
+                _upsert_chemical(c)
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        count = conn.execute("SELECT COUNT(*) FROM chemicals").fetchone()[0]
+        conn.close()
+        if count > 0:
+            return
+        for c in CHEMICALS_SEED:
+            _upsert_chemical(c)
+
+# ============================================================ EMAIL =========
+
+def _send_email(to: str, subject: str, body: str) -> None:
+    if not smtp_ready():
+        raise RuntimeError("SMTP not configured.")
+    msg = EmailMessage()
+    msg["From"]     = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"]       = to
+    msg["Subject"]  = subject
+    msg["Reply-To"] = SMTP_USER
+    msg.set_content(body)
+    if SMTP_USE_TLS:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+            s.ehlo(); s.starttls(); s.ehlo()
+            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+            s.ehlo(); s.login(SMTP_USER, SMTP_PASSWORD)
+            s.send_message(msg)
+
+def _send_async(to: str, subject: str, body: str) -> None:
+    def _run():
+        try: _send_email(to, subject, body)
+        except Exception: pass
+    threading.Thread(target=_run, daemon=True).start()
+
+def _send_async_multi(recipients: List[str], subject: str, body: str) -> None:
+    for r in recipients:
+        _send_async(r, subject, body)
+
+# ------------ Chemical-specific email notifications --------------------------
+
+def notify_chem_request(chem_name: str, req: Dict) -> None:
+    """Notify chem admin when someone requests an in-stock chemical."""
+    if not smtp_ready() or not CHEM_ADMIN_EMAIL:
+        return
+    body = (
+        f"New chemical request submitted.\n\n"
+        f"  Chemical : {chem_name}\n"
+        f"  Requester: {req['first_name']} {req['surname']} ({req['requester_email']})\n"
+        f"  Quantity : {req['quantity']}\n"
+        f"  Purpose  : {req.get('purpose','—')}\n\n"
+        f"Please review in the admin panel.\n\nRegards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(CHEM_ADMIN_EMAIL, f"[Chemical Request] {chem_name} — {req['first_name']} {req['surname']}", body)
+
+def notify_user_chem_request_received(req: Dict, chem_name: str) -> None:
+    if not smtp_ready(): return
+    body = (
+        f"Hello {req['first_name']},\n\n"
+        f"Your request for {chem_name} has been received.\n\n"
+        f"  Quantity  : {req['quantity']}\n"
+        f"  Status    : Pending review\n\n"
+        f"You will be notified once your request is processed.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(req["requester_email"], f"Chemical request received — {chem_name}", body)
+
+def notify_chem_purchase_request(pr: Dict) -> None:
+    """Notify all purchase notification recipients of a new purchase request."""
+    if not smtp_ready() or not PURCHASE_NOTIFY_EMAILS:
+        return
+    body = (
+        f"New chemical purchase request submitted.\n\n"
+        f"  Material     : {pr['material_name']}\n"
+        f"  Formula      : {pr.get('formula','—')}\n"
+        f"  CAS No.      : {pr.get('cas_number','—')}\n"
+        f"  Specifications: {pr.get('specifications','—')}\n"
+        f"  Amount       : {pr['amount']} {pr['unit']}\n"
+        f"  Requester    : {pr['requester_first_name']} {pr['requester_surname']} ({pr['requester_email']})\n"
+        f"  Comments     : {pr.get('comments','—')}\n\n"
+        f"Please review in the admin panel.\n\nRegards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async_multi(
+        PURCHASE_NOTIFY_EMAILS,
+        f"[Purchase Request] {pr['material_name']} — {pr['requester_first_name']} {pr['requester_surname']}",
+        body
+    )
+
+def notify_user_purchase_received(pr: Dict) -> None:
+    if not smtp_ready(): return
+    body = (
+        f"Hello {pr['requester_first_name']},\n\n"
+        f"Your purchase request for {pr['material_name']} has been submitted.\n\n"
+        f"  Amount   : {pr['amount']} {pr['unit']}\n"
+        f"  Status   : Pending\n\n"
+        f"We will contact you once the request is reviewed.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(pr["requester_email"], f"Purchase request received — {pr['material_name']}", body)
+
+def notify_user_chem_status(req: Dict, chem_name: str) -> None:
+    if not smtp_ready(): return
+    body = (
+        f"Hello {req['first_name']},\n\n"
+        f"Your chemical request for {chem_name} has been updated.\n\n"
+        f"  New status : {req['status'].upper()}\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(req["requester_email"], f"Chemical request {req['status']} — {chem_name}", body)
+
+# ====================================================== BOOKING HELPERS =====
+
 def parse_date(value: str) -> Optional[date]:
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except Exception:
-        return None
+    try: return datetime.strptime(value, "%Y-%m-%d").date()
+    except Exception: return None
 
 def parse_time(value: str) -> Optional[time]:
     for fmt in ("%H:%M", "%H:%M:%S"):
-        try:
-            return datetime.strptime(value, fmt).time()
-        except Exception:
-            pass
+        try: return datetime.strptime(value, fmt).time()
+        except Exception: pass
     return None
 
 def overlaps(a_s: time, a_e: time, b_s: time, b_e: time) -> bool:
@@ -256,8 +858,7 @@ def normalize_booking_date(v: Any) -> date:
 def iter_workdays(start_d: date, end_d: date):
     d = start_d
     while d <= end_d:
-        if d.weekday() < 5:
-            yield d
+        if d.weekday() < 5: yield d
         d += timedelta(days=1)
 
 def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
@@ -268,8 +869,7 @@ def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
     end = datetime.combine(d, WORKDAY_END)
     while cur < end:
         nxt = cur + timedelta(minutes=SLOT_MINUTES)
-        if nxt > end:
-            break
+        if nxt > end: break
         slots.append((cur.time(), nxt.time()))
         cur = nxt
     return slots
@@ -281,11 +881,6 @@ def next_two_weeks_window() -> Tuple[date, date]:
 def has_conflict(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: str,
                  exclude_id: Optional[int] = None) -> bool:
     init_db()
-    base_q = (
-        "SELECT 1 FROM bookings WHERE lab_slug={p} AND booking_date={d} "
-        "AND start_time<{e} AND end_time>{s} "
-        "AND status != 'rejected' AND (cancelled_at IS NULL OR cancelled_at = '') LIMIT 1"
-    )
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
@@ -307,7 +902,7 @@ def has_conflict(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: st
             _pg_putconn(conn)
     else:
         conn = sqlite3.connect(SQLITE_PATH)
-        cur  = conn.cursor()
+        cur = conn.cursor()
         if exclude_id is None:
             cur.execute(
                 "SELECT 1 FROM bookings WHERE lab_slug=? AND booking_date=? "
@@ -335,21 +930,17 @@ def merge_prefill(form: Dict[str, str], args: Any) -> Dict[str, str]:
     out = dict(form)
     for k in ("booking_date", "start_time", "end_time"):
         v = (args.get(k) or "").strip()
-        if v:
-            out[k] = v
+        if v: out[k] = v
     return out
 
-# ---------------------------------------------------- Booking rule check ----
-def check_booking_rules(lab_slug: str, booking_date: str, start_hhmm: str,
-                        end_hhmm: str) -> List[str]:
+def check_booking_rules(lab_slug: str, booking_date: str, start_hhmm: str, end_hhmm: str) -> List[str]:
     errors: List[str] = []
     lab = LABS.get(lab_slug, {})
     now = datetime.now(TZ)
-    bd = parse_date(booking_date)
-    st = parse_time(start_hhmm)
-    et = parse_time(end_hhmm)
-    if not bd or not st or not et:
-        return errors
+    bd  = parse_date(booking_date)
+    st  = parse_time(start_hhmm)
+    et  = parse_time(end_hhmm)
+    if not bd or not st or not et: return errors
     slot_start = datetime.combine(bd, st).replace(tzinfo=TZ)
     slot_end   = datetime.combine(bd, et).replace(tzinfo=TZ)
     min_notice = lab.get("min_notice_hours", 0)
@@ -366,7 +957,6 @@ def check_booking_rules(lab_slug: str, booking_date: str, start_hhmm: str,
         errors.append("Bookings are only available on weekdays (Mon–Fri).")
     return errors
 
-# ---------------------------------------------------------- Availability ----
 def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) -> List[Dict]:
     init_db()
     if USE_POSTGRES:
@@ -383,8 +973,7 @@ def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) ->
         finally:
             _pg_putconn(conn)
     else:
-        conn = sqlite3.connect(SQLITE_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = sqlite3.connect(SQLITE_PATH); conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT booking_date,start_time,end_time FROM bookings "
             "WHERE lab_slug=? AND booking_date>=? AND booking_date<=? "
@@ -395,10 +984,8 @@ def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) ->
 
 def is_slot_free(bookings: List[Dict], d: date, s: time, e: time) -> bool:
     for b in bookings:
-        if normalize_booking_date(b["booking_date"]) != d:
-            continue
-        if overlaps(s, e, normalize_booking_time(b["start_time"]),
-                    normalize_booking_time(b["end_time"])):
+        if normalize_booking_date(b["booking_date"]) != d: continue
+        if overlaps(s, e, normalize_booking_time(b["start_time"]), normalize_booking_time(b["end_time"])):
             return False
     return True
 
@@ -414,56 +1001,21 @@ def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
             free = is_slot_free(bookings, d, s, e)
             if free and min_notice:
                 slot_dt = datetime.combine(d, s).replace(tzinfo=TZ)
-                if slot_dt < now + timedelta(hours=min_notice):
-                    free = False
-            slots.append({
-                "date":  d.isoformat(),
-                "start": s.strftime("%H:%M"),
-                "end":   e.strftime("%H:%M"),
-                "free":  free,
-                "value": f"{d.isoformat()}|{s.strftime('%H:%M')}|{e.strftime('%H:%M')}",
-            })
+                if slot_dt < now + timedelta(hours=min_notice): free = False
+            slots.append({"date": d.isoformat(), "start": s.strftime("%H:%M"),
+                          "end": e.strftime("%H:%M"), "free": free,
+                          "value": f"{d.isoformat()}|{s.strftime('%H:%M')}|{e.strftime('%H:%M')}"})
         days.append({"date": d, "slots": slots})
     return days
 
-# ------------------------------------------------------------------ Email ----
-def _send_email(to: str, subject: str, body: str) -> None:
-    if not smtp_ready():
-        raise RuntimeError("SMTP not configured.")
-    msg = EmailMessage()
-    msg["From"]    = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
-    msg["To"]      = to
-    msg["Subject"] = subject
-    msg["Reply-To"]= SMTP_USER
-    msg.set_content(body)
-    if SMTP_USE_TLS:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
-            s.ehlo(); s.starttls(); s.ehlo()
-            s.login(SMTP_USER, SMTP_PASSWORD)
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
-            s.ehlo(); s.login(SMTP_USER, SMTP_PASSWORD)
-            s.send_message(msg)
-
-def _send_async(to: str, subject: str, body: str) -> None:
-    def _run():
-        try:
-            _send_email(to, subject, body)
-        except Exception:
-            pass
-    threading.Thread(target=_run, daemon=True).start()
-
-def send_email_for_lab(_: str, to: str, subject: str, body: str) -> None:
-    _send_email(to, subject, body)
+# ------------------------------------------------------------ Booking email --
 
 def _slot_str(b: Dict) -> str:
-    return f"{b['booking_date']}  {str(b['start_time'])[:5]}–{str(b['end_time'])[:5]}"
+    return f"{b['booking_date']} {str(b['start_time'])[:5]}–{str(b['end_time'])[:5]}"
 
 def _cancel_url_for(b: Dict) -> str:
     token = b.get("cancel_token", "")
-    if not token:
-        return ""
+    if not token: return ""
     return url_for("cancel_booking_get", token=token, _external=True)
 
 def notify_user_submission(lab_slug: str, b: Dict) -> None:
@@ -473,11 +1025,9 @@ def notify_user_submission(lab_slug: str, b: Dict) -> None:
     body = (
         f"Hello {b['user_name']},\n\n"
         f"We have received your booking request for {lab_title}.\n\n"
-        f"  Lab  : {lab_title}\n"
-        f"  Slot : {_slot_str(b)}\n"
-        f"  Ref  : #{b['id']}\n\n"
-        f"Your request is pending review. You will receive another email once approved or declined.\n\n"
-        + (f"To cancel this request:\n{cancel_url}\n\n" if cancel_url else "")
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n\n"
+        f"Your request is pending review.\n\n"
+        + (f"To cancel: {cancel_url}\n\n" if cancel_url else "")
         + f"Regards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Booking request received — {lab_title}", body)
@@ -485,74 +1035,34 @@ def notify_user_submission(lab_slug: str, b: Dict) -> None:
 def notify_admin_new_booking(lab_slug: str, b: Dict, approve_url: str, reject_url: str) -> None:
     if not smtp_ready(): return
     lab_title = LABS[lab_slug]["title"]
-    details = ""
-    if lab_slug == "furnace":
-        details = (
-            f"\n  Nanomaterial : {b.get('nanomaterial_type') or '—'}\n"
-            f"  Melting pt   : {b.get('melting_point') or '—'}\n"
-            f"  Density      : {b.get('material_density') or '—'}\n"
-            f"  Anneal temp  : {b.get('anneal_temp_c') or '—'} °C\n"
-            f"  Anneal time  : {b.get('anneal_time_h') or '—'} h\n"
-            f"  Gas type     : {b.get('gas_type') or '—'}\n"
-            f"  Pressure     : {b.get('pressure') or '—'}\n"
-            f"  Vacuum       : {b.get('vacuum') or '—'}\n"
-        )
-    elif lab_slug == "xps":
-        details = (
-            f"\n  Sample name  : {b.get('sample_name') or '—'}\n"
-            f"  Sample count : {b.get('sample_count') or '—'}\n"
-            f"  Elements     : {b.get('elements_of_interest') or '—'}\n"
-            f"  Analysis     : {b.get('analysis_type') or '—'}\n"
-            f"  Charge neut. : {b.get('charge_neutralizer') or '—'}\n"
-            f"  Mounting     : {b.get('mounting_method') or '—'}\n"
-            f"  Outgassing   : {b.get('outgassing_risk') or '—'}\n"
-        )
     body = (
         f"New booking request for {lab_title}.\n\n"
-        f"  Name  : {b['user_name']}\n"
-        f"  Email : {b['user_email']}\n"
-        f"  Slot  : {_slot_str(b)}\n"
-        f"  Notes : {b.get('notes') or '—'}\n"
-        f"{details}\n"
-        f"─────────────────────────────────────\n"
-        f"APPROVE:  {approve_url}\n\n"
-        f"REJECT:   {reject_url}\n"
-        f"─────────────────────────────────────\n\n"
-        f"Regards,\n{SMTP_FROM_NAME}\n"
+        f" Name  : {b['user_name']}\n Email : {b['user_email']}\n Slot  : {_slot_str(b)}\n\n"
+        f"APPROVE: {approve_url}\nREJECT:  {reject_url}\n\nRegards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(SMTP_USER, f"[Action required] New booking — {lab_title}", body)
 
 def notify_user_approved(lab_slug: str, b: Dict, note: str = "") -> None:
     if not smtp_ready(): return
-    lab_title  = LABS[lab_slug]["title"]
+    lab_title = LABS[lab_slug]["title"]
     cancel_url = _cancel_url_for(b)
-    note_line  = f"\n  Note from admin: {note}\n" if note else ""
+    note_line = f"\n Note: {note}\n" if note else ""
     body = (
-        f"Hello {b['user_name']},\n\n"
-        f"Your booking for {lab_title} has been approved.\n\n"
-        f"  Lab  : {lab_title}\n"
-        f"  Slot : {_slot_str(b)}\n"
-        f"  Ref  : #{b['id']}\n"
-        f"{note_line}\n"
-        f"Please arrive on time and follow all lab safety protocols.\n\n"
-        + (f"To cancel:\n{cancel_url}\n\n" if cancel_url else "")
+        f"Hello {b['user_name']},\n\nYour booking for {lab_title} has been approved.\n\n"
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n{note_line}\n"
+        + (f"To cancel: {cancel_url}\n\n" if cancel_url else "")
         + f"Regards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Booking confirmed — {lab_title}", body)
 
 def notify_user_rejected(lab_slug: str, b: Dict, reason: str = "") -> None:
     if not smtp_ready(): return
-    lab_title   = LABS[lab_slug]["title"]
-    reason_line = f"\n  Reason : {reason}\n" if reason else ""
+    lab_title = LABS[lab_slug]["title"]
     body = (
-        f"Hello {b['user_name']},\n\n"
-        f"Your booking request for {lab_title} could not be approved.\n\n"
-        f"  Lab  : {lab_title}\n"
-        f"  Slot : {_slot_str(b)}\n"
-        f"  Ref  : #{b['id']}\n"
-        f"{reason_line}\n"
-        f"Please contact the lab administrator to discuss alternatives.\n\n"
-        f"Regards,\n{SMTP_FROM_NAME}\n"
+        f"Hello {b['user_name']},\n\nYour booking for {lab_title} was declined.\n\n"
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n"
+        + (f" Reason: {reason}\n" if reason else "")
+        + f"\nRegards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Booking declined — {lab_title}", body)
 
@@ -560,30 +1070,14 @@ def notify_user_cancelled(lab_slug: str, b: Dict) -> None:
     if not smtp_ready(): return
     lab_title = LABS[lab_slug]["title"]
     body = (
-        f"Hello {b['user_name']},\n\n"
-        f"Your booking for {lab_title} has been cancelled.\n\n"
-        f"  Lab  : {lab_title}\n"
-        f"  Slot : {_slot_str(b)}\n"
-        f"  Ref  : #{b['id']}\n\n"
+        f"Hello {b['user_name']},\n\nYour booking for {lab_title} has been cancelled.\n\n"
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n\n"
         f"Regards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Booking cancelled — {lab_title}", body)
 
-def notify_user_reminder(lab_slug: str, b: Dict) -> None:
-    if not smtp_ready(): return
-    lab_title = LABS[lab_slug]["title"]
-    body = (
-        f"Hello {b['user_name']},\n\n"
-        f"Reminder: you have a booking tomorrow.\n\n"
-        f"  Lab  : {lab_title}\n"
-        f"  Slot : {_slot_str(b)}\n"
-        f"  Ref  : #{b['id']}\n\n"
-        f"Please arrive on time and follow all safety protocols.\n\n"
-        f"Regards,\n{SMTP_FROM_NAME}\n"
-    )
-    _send_async(b["user_email"], f"Reminder: booking tomorrow — {lab_title}", body)
+# ----------------------------------------------------------- Admin auth ------
 
-# ------------------------------------------------------- Admin auth --------
 def _require_admin_vars(lab_slug: str):
     if not ADMIN[lab_slug]["username"] or not ADMIN[lab_slug]["password"]:
         abort(404, description=f"Admin not configured for {lab_slug}.")
@@ -591,44 +1085,22 @@ def _require_admin_vars(lab_slug: str):
 def is_admin_for(lab_slug: str) -> bool:
     return session.get("is_admin") is True and session.get("admin_lab") == lab_slug
 
+def is_chem_admin() -> bool:
+    return session.get("is_chem_admin") is True
+
 def require_admin(lab_slug: str):
     _require_admin_vars(lab_slug)
     if not is_admin_for(lab_slug):
         return redirect(url_for("admin_login_lab", lab_slug=lab_slug, next=request.path))
     return None
 
-@app.route("/admin/<lab_slug>/login", methods=["GET","POST"])
-def admin_login_lab(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    _require_admin_vars(lab_slug)
-    if request.method == "POST":
-        user = (request.form.get("username") or "").strip()
-        pw   = (request.form.get("password") or "").strip()
-        if (hmac.compare_digest(user.lower(), ADMIN[lab_slug]["username"].lower())
-                and hmac.compare_digest(pw, ADMIN[lab_slug]["password"])):
-            session.clear()
-            session["is_admin"]       = True
-            session["admin_lab"]      = lab_slug
-            session["admin_username"] = ADMIN[lab_slug]["username"]
-            return redirect(request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug))
-        flash("Invalid credentials.", "error")
-    return render_template("admin_login.html", lab_slug=lab_slug,
-                           lab_title=LABS[lab_slug]["title"],
-                           admin_username_hint=ADMIN[lab_slug]["username"],
-                           next=request.args.get("next") or url_for("admin_lab", lab_slug=lab_slug))
-
-@app.get("/admin/logout")
-def admin_logout():
-    session.clear()
-    return redirect(url_for("index"))
-
-# --------------------------------------------------- Booking URL helper -----
 def booking_url_for(lab_slug: str, **params) -> str:
     if lab_slug == "furnace": return url_for("furnace", **params)
-    if lab_slug == "xps":     return url_for("xps",     **params)
+    if lab_slug == "xps":     return url_for("xps", **params)
     return url_for("lab_generic", lab_slug=lab_slug, **params)
 
-# ---------------------------------------------------------------- DB CRUD ---
+# ---------------------------------------------------------- Booking DB CRUD --
+
 def _row_to_dict_pg(row: Any, cols: List[str]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for k, v in dict(zip(cols, row)).items():
@@ -660,23 +1132,6 @@ def db_list_bookings(lab_slug: str) -> List[Dict[str, Any]]:
     else:
         conn = sqlite3.connect(SQLITE_PATH); conn.row_factory = sqlite3.Row
         rows = conn.execute("SELECT * FROM bookings WHERE lab_slug=? ORDER BY booking_date DESC,start_time DESC",(lab_slug,)).fetchall()
-        conn.close()
-        return [_normalise_sqlite_row(dict(r)) for r in rows]
-
-def db_list_bookings_by_email(email: str) -> List[Dict[str, Any]]:
-    init_db()
-    if USE_POSTGRES:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT * FROM bookings WHERE user_email=%s ORDER BY booking_date DESC,start_time DESC",(email,))
-                cols = [d.name for d in cur.description]
-                return [_row_to_dict_pg(r, cols) for r in cur.fetchall()]
-        finally:
-            _pg_putconn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_PATH); conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT * FROM bookings WHERE user_email=? ORDER BY booking_date DESC,start_time DESC",(email,)).fetchall()
         conn.close()
         return [_normalise_sqlite_row(dict(r)) for r in rows]
 
@@ -760,8 +1215,8 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
                      payload.get("updated_at"),payload.get("updated_by"),
                      payload.get("status","pending"),payload.get("approval_token"),payload.get("cancel_token")))
                 bid = cur.fetchone()[0]
-            conn.commit()
-            return int(bid)
+                conn.commit()
+                return int(bid)
         finally:
             _pg_putconn(conn)
     else:
@@ -788,41 +1243,6 @@ def db_insert_booking(payload: Dict[str, Any]) -> int:
         conn.commit(); bid = cur.lastrowid; conn.close()
         return int(bid)
 
-def db_update_booking_time(booking_id: int, new_date: str, new_start: str,
-                           new_end: str, updated_by: str) -> None:
-    init_db()
-    now_iso = datetime.utcnow().isoformat(timespec="seconds")+"Z"
-    if USE_POSTGRES:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE bookings SET booking_date=%s::date,start_time=%s::time,"
-                            "end_time=%s::time,updated_at=NOW(),updated_by=%s WHERE id=%s",
-                            (new_date,new_start,new_end,updated_by,booking_id))
-            conn.commit()
-        finally:
-            _pg_putconn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_PATH)
-        conn.execute("UPDATE bookings SET booking_date=?,start_time=?,end_time=?,updated_at=?,updated_by=? WHERE id=?",
-                     (new_date,new_start,new_end,now_iso,updated_by,booking_id))
-        conn.commit(); conn.close()
-
-def db_delete_booking(booking_id: int) -> None:
-    init_db()
-    if USE_POSTGRES:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM bookings WHERE id=%s",(booking_id,))
-            conn.commit()
-        finally:
-            _pg_putconn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_PATH)
-        conn.execute("DELETE FROM bookings WHERE id=?",(booking_id,))
-        conn.commit(); conn.close()
-
 def db_set_booking_status(booking_id: int, status: str, rejection_reason: str = "",
                           approval_note: str = "", updated_by: str = "") -> None:
     init_db()
@@ -834,7 +1254,7 @@ def db_set_booking_status(booking_id: int, status: str, rejection_reason: str = 
                 cur.execute("UPDATE bookings SET status=%s,rejection_reason=%s,approval_note=%s,"
                             "updated_at=NOW(),updated_by=%s,approval_token=NULL WHERE id=%s",
                             (status,rejection_reason or None,approval_note or None,updated_by or None,booking_id))
-            conn.commit()
+                conn.commit()
         finally:
             _pg_putconn(conn)
     else:
@@ -852,13 +1272,59 @@ def db_cancel_booking(booking_id: int) -> None:
         try:
             with conn.cursor() as cur:
                 cur.execute("UPDATE bookings SET status='rejected',cancelled_at=NOW(),cancel_token=NULL WHERE id=%s",(booking_id,))
-            conn.commit()
+                conn.commit()
         finally:
             _pg_putconn(conn)
     else:
         conn = sqlite3.connect(SQLITE_PATH)
         conn.execute("UPDATE bookings SET status='rejected',cancelled_at=?,cancel_token=NULL WHERE id=?",(now_iso,booking_id))
         conn.commit(); conn.close()
+
+def db_delete_booking(booking_id: int) -> None:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bookings WHERE id=%s",(booking_id,))
+                conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("DELETE FROM bookings WHERE id=?",(booking_id,))
+        conn.commit(); conn.close()
+
+def db_pending_counts() -> Dict[str, int]:
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT lab_slug,COUNT(*) FROM bookings WHERE status='pending' "
+                            "AND cancelled_at IS NULL GROUP BY lab_slug")
+                return {r[0]:r[1] for r in cur.fetchall()}
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        rows = conn.execute("SELECT lab_slug,COUNT(*) FROM bookings WHERE status='pending' "
+                            "AND (cancelled_at IS NULL OR cancelled_at='') GROUP BY lab_slug").fetchall()
+        conn.close()
+        return {r[0]:r[1] for r in rows}
+
+def collect_selected_slots() -> List[Tuple[str, str, str]]:
+    slots: List[Tuple[str, str, str]] = []
+    for v in request.form.getlist("slot"):
+        parts = (v or "").split("|")
+        if len(parts) != 3: continue
+        d, s, e = parts
+        if parse_date(d) and parse_time(s) and parse_time(e):
+            slots.append((d, s, e))
+    return sorted(list({x for x in slots}))
+
+def is_valid_furnace_block(s: str, e: str) -> bool:
+    return (s, e) in (("08:00","12:00"),("12:00","16:00"))
 
 def db_mark_reminder_sent(booking_id: int) -> None:
     init_db()
@@ -867,7 +1333,7 @@ def db_mark_reminder_sent(booking_id: int) -> None:
         try:
             with conn.cursor() as cur:
                 cur.execute("UPDATE bookings SET reminder_sent=TRUE WHERE id=%s",(booking_id,))
-            conn.commit()
+                conn.commit()
         finally:
             _pg_putconn(conn)
     else:
@@ -895,80 +1361,268 @@ def db_get_reminder_candidates() -> List[Dict[str, Any]]:
         conn.close()
         return [_normalise_sqlite_row(dict(r)) for r in rows]
 
-def db_pending_counts() -> Dict[str, int]:
-    init_db()
-    if USE_POSTGRES:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT lab_slug,COUNT(*) FROM bookings WHERE status='pending' "
-                            "AND cancelled_at IS NULL GROUP BY lab_slug")
-                return {r[0]:r[1] for r in cur.fetchall()}
-        finally:
-            _pg_putconn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_PATH)
-        rows=conn.execute("SELECT lab_slug,COUNT(*) FROM bookings WHERE status='pending' "
-                          "AND (cancelled_at IS NULL OR cancelled_at='') GROUP BY lab_slug").fetchall()
-        conn.close()
-        return {r[0]:r[1] for r in rows}
+# ================================================================= ROUTES ===
 
-# --------------------------------------------------- Slot / form helpers ----
-def collect_selected_slots() -> List[Tuple[str, str, str]]:
-    slots: List[Tuple[str, str, str]] = []
-    for v in request.form.getlist("slot"):
-        parts = (v or "").split("|")
-        if len(parts) != 3: continue
-        d, s, e = parts
-        if parse_date(d) and parse_time(s) and parse_time(e):
-            slots.append((d, s, e))
-    return sorted(list({x for x in slots}))
-
-def is_valid_furnace_block(s: str, e: str) -> bool:
-    return (s, e) in (("08:00","12:00"),("12:00","16:00"))
-
-def _generate_ical(b: Dict) -> str:
-    lab_title = LABS.get(b["lab_slug"],{}).get("title",b["lab_slug"])
-    ds = f"{b['booking_date'].replace('-','')}T{b['start_time'][:5].replace(':','')}00"
-    de = f"{b['booking_date'].replace('-','')}T{b['end_time'][:5].replace(':','')}00"
-    return (
-        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//U2ACN2 Nanolab//EN\r\n"
-        "BEGIN:VEVENT\r\n"
-        f"UID:booking-{b['id']}@u2acn2\r\n"
-        f"DTSTART;TZID=Africa/Johannesburg:{ds}\r\n"
-        f"DTEND;TZID=Africa/Johannesburg:{de}\r\n"
-        f"SUMMARY:{lab_title} booking\r\n"
-        f"DESCRIPTION:Booking #{b['id']} for {b['user_name']}\r\n"
-        "END:VEVENT\r\nEND:VCALENDAR\r\n"
-    )
-
-# ----------------------------------------------------------------- Routes ---
 @app.get("/health")
 def health():
-    return {"status":"ok"}, 200
+    return {"status": "ok"}, 200
 
 @app.route("/")
 def index():
+    init_db()
     pending = db_pending_counts()
+    chem_pending = len(_list_chemical_requests(status="pending"))
+    purchase_pending = len(_list_purchase_requests(status="pending"))
     labs = sorted(
-        [{"title":LABS[k]["title"],"slug":k,"subtitle":LABS[k]["subtitle"],
-          "booking_url":booking_url_for(k),
-          "availability_url":url_for("lab_availability",lab_slug=k),
-          "admin_url":url_for("admin_lab",lab_slug=k),
-          "pending_count":pending.get(k,0)} for k in LABS],
+        [{"title": LABS[k]["title"], "slug": k, "subtitle": LABS[k]["subtitle"],
+          "booking_url": booking_url_for(k),
+          "availability_url": url_for("lab_availability", lab_slug=k),
+          "admin_url": url_for("admin_lab", lab_slug=k),
+          "pending_count": pending.get(k, 0)} for k in LABS],
         key=lambda x: x["title"].lower())
-    return render_template("index.html", labs=labs, admin_portal_url=url_for("admin_portal"))
+    return render_template("index.html", labs=labs,
+                           admin_portal_url=url_for("admin_portal"),
+                           chem_url=url_for("chemicals"),
+                           chem_pending=chem_pending,
+                           purchase_pending=purchase_pending)
+
+# ---------------------------------------- Chemical Inventory Routes ---------
+
+@app.route("/chemicals")
+def chemicals():
+    init_db()
+    q = (request.args.get("q") or "").strip()
+    if q:
+        results = _search_chemicals(q)
+    else:
+        results = _get_chemicals_all()
+    return render_template("chemicals.html", chemicals=results, query=q)
+
+@app.route("/chemicals/request", methods=["POST"])
+def chemical_request():
+    init_db()
+    chem_id    = int(request.form.get("chem_id", 0))
+    first_name = (request.form.get("first_name") or "").strip()
+    surname    = (request.form.get("surname") or "").strip()
+    email      = (request.form.get("email") or "").strip()
+    quantity   = (request.form.get("quantity") or "").strip()
+    purpose    = (request.form.get("purpose") or "").strip()
+
+    errors = []
+    if not first_name: errors.append("First name is required.")
+    if not surname:    errors.append("Surname is required.")
+    if not email or "@" not in email: errors.append("Valid email is required.")
+    if not quantity:   errors.append("Quantity is required.")
+
+    chem = _get_chemical_by_id(chem_id)
+    if not chem: errors.append("Chemical not found.")
+
+    if errors:
+        flash(" ".join(errors), "error")
+        return redirect(url_for("chemicals"))
+
+    rid = _add_chemical_request(chem_id, first_name, surname, email, quantity, purpose)
+    req = {"first_name": first_name, "surname": surname, "requester_email": email,
+           "quantity": quantity, "purpose": purpose}
+    notify_chem_request(chem["name"], req)
+    notify_user_chem_request_received(req, chem["name"])
+    flash(f"Request for {chem['name']} submitted! The lab admin will review it.", "success")
+    return redirect(url_for("chemicals"))
+
+@app.route("/chemicals/purchase", methods=["GET", "POST"])
+def purchase_request():
+    init_db()
+    if request.method == "GET":
+        prefill = {k: (request.args.get(k) or "") for k in
+                   ("material_name","formula","cas_number")}
+        return render_template("purchase_request.html", prefill=prefill)
+
+    data = {
+        "material_name":        (request.form.get("material_name") or "").strip(),
+        "formula":              (request.form.get("formula") or "").strip(),
+        "cas_number":           (request.form.get("cas_number") or "").strip(),
+        "specifications":       (request.form.get("specifications") or "").strip(),
+        "amount":               (request.form.get("amount") or "").strip(),
+        "unit":                 (request.form.get("unit") or "g").strip(),
+        "requester_first_name": (request.form.get("requester_first_name") or "").strip(),
+        "requester_surname":    (request.form.get("requester_surname") or "").strip(),
+        "requester_email":      (request.form.get("requester_email") or "").strip(),
+        "comments":             (request.form.get("comments") or "").strip(),
+    }
+    errors = []
+    if not data["material_name"]:        errors.append("Material name is required.")
+    if not data["amount"]:               errors.append("Amount is required.")
+    if not data["requester_first_name"]: errors.append("First name is required.")
+    if not data["requester_surname"]:    errors.append("Surname is required.")
+    if not data["requester_email"] or "@" not in data["requester_email"]:
+        errors.append("Valid email is required.")
+
+    if errors:
+        flash(" ".join(errors), "error")
+        return render_template("purchase_request.html", prefill=data, errors=errors)
+
+    _add_purchase_request(data)
+    notify_chem_purchase_request(data)
+    notify_user_purchase_received(data)
+    flash("Purchase request submitted! You will be contacted once reviewed.", "success")
+    return redirect(url_for("chemicals"))
+
+# ---------------------------------------- Chemical Admin Routes --------------
+
+@app.route("/admin/chemicals/login", methods=["GET", "POST"])
+def chem_admin_login():
+    if request.method == "POST":
+        pw = (request.form.get("password") or "").strip()
+        if hmac.compare_digest(pw, CHEM_ADMIN_PASSWORD):
+            session["is_chem_admin"] = True
+            return redirect(request.form.get("next") or url_for("chem_admin"))
+        flash("Invalid password.", "error")
+    return render_template("chem_admin_login.html",
+                           next=request.args.get("next") or url_for("chem_admin"))
+
+@app.get("/admin/chemicals/logout")
+def chem_admin_logout():
+    session.pop("is_chem_admin", None)
+    return redirect(url_for("chemicals"))
+
+@app.route("/admin/chemicals")
+def chem_admin():
+    if not is_chem_admin():
+        return redirect(url_for("chem_admin_login", next=request.path))
+    init_db()
+    all_chems    = _get_chemicals_all()
+    chem_reqs    = _list_chemical_requests()
+    purchase_reqs = _list_purchase_requests()
+    return render_template("chem_admin.html",
+                           chemicals=all_chems,
+                           chem_requests=chem_reqs,
+                           purchase_requests=purchase_reqs)
+
+@app.route("/admin/chemicals/add", methods=["POST"])
+def chem_admin_add():
+    if not is_chem_admin():
+        abort(403)
+    init_db()
+    data = {k: (request.form.get(k) or "").strip() for k in
+            ("name","formula","mw","cas_no","supplier","amount","expiry_date",
+             "storage_group","location","notes","reserved_for","reserved_label")}
+    if not data["name"]:
+        flash("Chemical name is required.", "error")
+        return redirect(url_for("chem_admin"))
+    _upsert_chemical(data)
+    flash(f"Chemical '{data['name']}' saved.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/delete/<int:chem_id>", methods=["POST"])
+def chem_admin_delete(chem_id: int):
+    if not is_chem_admin(): abort(403)
+    init_db()
+    chem = _get_chemical_by_id(chem_id)
+    if chem:
+        _delete_chemical(chem_id)
+        flash(f"Deleted '{chem['name']}'.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/reserve/<int:chem_id>", methods=["POST"])
+def chem_admin_reserve(chem_id: int):
+    if not is_chem_admin(): abort(403)
+    init_db()
+    chem = _get_chemical_by_id(chem_id)
+    if not chem: abort(404)
+    reserved_for   = (request.form.get("reserved_for") or "").strip()
+    reserved_label = (request.form.get("reserved_label") or "").strip()
+    data = dict(chem)
+    data["reserved_for"]   = reserved_for
+    data["reserved_label"] = reserved_label
+    _upsert_chemical(data)
+    flash(f"Reservation updated for '{chem['name']}'.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/request/<int:req_id>/status", methods=["POST"])
+def chem_admin_request_status(req_id: int):
+    if not is_chem_admin(): abort(403)
+    init_db()
+    status = (request.form.get("status") or "").strip()
+    if status not in ("approved","rejected","fulfilled"):
+        flash("Invalid status.", "error")
+        return redirect(url_for("chem_admin"))
+    _set_chemical_request_status(req_id, status)
+    # Notify user
+    reqs = _list_chemical_requests()
+    req = next((r for r in reqs if r["id"] == req_id), None)
+    if req:
+        notify_user_chem_status(req, req.get("chem_name", ""))
+    flash(f"Request #{req_id} marked as {status}.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/purchase/<int:req_id>/status", methods=["POST"])
+def chem_admin_purchase_status(req_id: int):
+    if not is_chem_admin(): abort(403)
+    init_db()
+    status = (request.form.get("status") or "").strip()
+    if status not in ("approved","rejected","purchased"):
+        flash("Invalid status.", "error")
+        return redirect(url_for("chem_admin"))
+    _set_purchase_request_status(req_id, status)
+    flash(f"Purchase request #{req_id} marked as {status}.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/export.csv")
+def chem_admin_export():
+    if not is_chem_admin(): abort(403)
+    init_db()
+    chems = _get_chemicals_all()
+    si = StringIO()
+    w = csv.writer(si)
+    w.writerow(["ID","Name","Formula","MW","CAS No.","Supplier","Amount",
+                "Expiry Date","Storage Group","Location","Notes","Reserved For","Reserved Label"])
+    for c in chems:
+        w.writerow([c.get("id",""), c.get("name",""), c.get("formula",""), c.get("mw",""),
+                    c.get("cas_no",""), c.get("supplier",""), c.get("amount",""),
+                    c.get("expiry_date",""), c.get("storage_group",""), c.get("location",""),
+                    c.get("notes",""), c.get("reserved_for",""), c.get("reserved_label","")])
+    resp = make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv"
+    resp.headers["Content-Disposition"] = "attachment; filename=chemicals.csv"
+    return resp
+
+# ---------------------------------------- Booking Admin Routes --------------
+
+@app.route("/admin/<lab_slug>/login", methods=["GET","POST"])
+def admin_login_lab(lab_slug: str):
+    if lab_slug not in LABS: abort(404)
+    _require_admin_vars(lab_slug)
+    if request.method == "POST":
+        user = (request.form.get("username") or "").strip()
+        pw   = (request.form.get("password") or "").strip()
+        if (hmac.compare_digest(user.lower(), ADMIN[lab_slug]["username"].lower())
+                and hmac.compare_digest(pw, ADMIN[lab_slug]["password"])):
+            session.clear()
+            session["is_admin"]        = True
+            session["admin_lab"]       = lab_slug
+            session["admin_username"]  = ADMIN[lab_slug]["username"]
+            return redirect(request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug))
+        flash("Invalid credentials.", "error")
+    return render_template("admin_login.html", lab_slug=lab_slug,
+                           lab_title=LABS[lab_slug]["title"],
+                           admin_username_hint=ADMIN[lab_slug]["username"],
+                           next=request.args.get("next") or url_for("admin_lab", lab_slug=lab_slug))
+
+@app.get("/admin/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("index"))
 
 @app.get("/admin")
 def admin_portal():
     pending = db_pending_counts()
-    order   = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
-    items   = []
+    order = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
+    items = []
     for slug in order:
         cnt   = pending.get(slug, 0)
-        badge = f' <span style="color:#ffc107;font-weight:700;">({cnt} pending)</span>' if cnt else ""
+        badge = f' <span class="badge-warn">({cnt} pending)</span>' if cnt else ""
         items.append(
-            f'<li style="margin:10px 0;"><strong>{LABS[slug]["title"]}</strong>{badge}<br/>'
+            f'<li><strong>{LABS[slug]["title"]}</strong>{badge}<br/>'
             f'<a href="{url_for("admin_lab",lab_slug=slug)}">Open admin</a>'
             f' &nbsp;·&nbsp;<a href="{url_for("lab_availability",lab_slug=slug)}">Availability</a>'
             f' &nbsp;·&nbsp;<a href="{booking_url_for(slug)}">Booking</a></li>')
@@ -978,8 +1632,54 @@ def admin_portal():
         '<title>Admin Portal</title><link rel="stylesheet" href="/static/style.css"/></head><body>'
         '<header class="topbar"><div class="container"><h1>Admin Portal</h1>'
         '<p class="sub">Select a lab — login required per lab.</p></div></header>'
-        f'<main class="container"><div class="card"><ul style="padding-left:18px;">{"".join(items)}</ul>'
+        f'<main class="container"><div class="card"><ul class="admin-list">{"".join(items)}</ul>'
         f'<p><a href="{url_for("index")}">← Back to homepage</a></p></div></main></body></html>')
+
+@app.route("/admin/<lab_slug>")
+def admin_lab(lab_slug: str):
+    if lab_slug not in LABS: abort(404)
+    redir = require_admin(lab_slug)
+    if redir: return redir
+    bookings = db_list_bookings(lab_slug)
+    return render_template("admin.html", lab_slug=lab_slug,
+                           lab_title=LABS[lab_slug]["title"],
+                           bookings=bookings,
+                           admin_username=session.get("admin_username",""))
+
+@app.route("/admin/<lab_slug>/booking/<int:booking_id>", methods=["GET","POST"])
+def admin_edit_booking(lab_slug: str, booking_id: int):
+    if lab_slug not in LABS: abort(404)
+    redir = require_admin(lab_slug)
+    if redir: return redir
+    b = db_get_booking(booking_id)
+    if not b or b.get("lab_slug") != lab_slug: abort(404)
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+        if action == "approve":
+            note = (request.form.get("approval_note") or "").strip()
+            db_set_booking_status(booking_id, "approved", approval_note=note,
+                                  updated_by=session.get("admin_username","admin"))
+            try: notify_user_approved(lab_slug, b, note)
+            except Exception: pass
+            flash("Booking approved.", "success")
+        elif action == "reject":
+            reason = (request.form.get("rejection_reason") or "").strip()
+            db_set_booking_status(booking_id, "rejected", rejection_reason=reason,
+                                  updated_by=session.get("admin_username","admin"))
+            try: notify_user_rejected(lab_slug, b, reason)
+            except Exception: pass
+            flash("Booking rejected.", "success")
+        elif action == "delete":
+            notify_user = request.form.get("notify_user") == "1"
+            if notify_user:
+                try: notify_user_cancelled(lab_slug, b)
+                except Exception: pass
+            db_delete_booking(booking_id)
+            flash("Booking deleted.", "success")
+            return redirect(url_for("admin_lab", lab_slug=lab_slug))
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+    return render_template("admin_booking.html", lab_slug=lab_slug,
+                           lab_title=LABS[lab_slug]["title"], booking=b)
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
@@ -993,521 +1693,216 @@ def lab_availability(lab_slug: str):
 def prefill_booking(lab_slug: str):
     if lab_slug not in LABS: abort(404)
     return redirect(booking_url_for(lab_slug,
-        booking_date=(request.args.get("booking_date") or "").strip(),
-        start_time=(request.args.get("start_time") or "").strip(),
-        end_time=(request.args.get("end_time") or "").strip()))
+                                    booking_date=(request.args.get("booking_date") or "").strip(),
+                                    start_time=(request.args.get("start_time") or "").strip(),
+                                    end_time=(request.args.get("end_time") or "").strip()))
 
 @app.route("/labs/<lab_slug>", methods=["GET","POST"])
 def lab_generic(lab_slug: str):
-    if lab_slug == "furnace": return redirect(url_for("furnace"))
-    if lab_slug == "xps":     return redirect(url_for("xps"))
-    if lab_slug not in LABS:  abort(404)
-    lab_info = {"brand":"iThemba Labs/U2ACN2","title":LABS[lab_slug]["title"],"slug":lab_slug,"administrators":[]}
-    if request.method == "POST": return handle_generic_booking(lab_info)
-    form  = merge_prefill(default_booking_form(), request.args)
-    days  = availability_days(lab_slug)
-    rules = {k:LABS[lab_slug].get(k) for k in ("min_notice_hours","max_days_ahead","max_duration_hours")}
-    return render_template("lab_generic.html", lab=lab_info, form=form, days=days, rules=rules)
-
-def _fire_booking_emails(lab_slug: str, bid: int, token: str, cancel_token: str):
-    b = db_get_booking(bid)
-    if not b or not smtp_ready(): return
-    notify_user_submission(lab_slug, b)
-    notify_admin_new_booking(lab_slug, b,
-        approve_url=url_for("approve_booking",     token=token,        _external=True),
-        reject_url =url_for("reject_booking_get",  token=token,        _external=True))
-
-def _insert_slots(base: Dict, slots: List[Tuple[str,str,str]]) -> List[int]:
-    ids = []
-    for d, s, e in slots:
-        token  = str(uuid.uuid4())
-        ctok   = str(uuid.uuid4())
-        p = dict(base); p.update({"booking_date":d,"start_time":s,"end_time":e,
-                                   "approval_token":token,"cancel_token":ctok})
-        bid = db_insert_booking(p); ids.append(bid)
-        _fire_booking_emails(base["lab_slug"], bid, token, ctok)
-    return ids
-
-def _insert_single(base: Dict, bd: str, st: str, et: str) -> int:
-    token = str(uuid.uuid4()); ctok = str(uuid.uuid4())
-    p = dict(base); p.update({"booking_date":bd,"start_time":st,"end_time":et,
-                               "approval_token":token,"cancel_token":ctok})
-    bid = db_insert_booking(p)
-    _fire_booking_emails(base["lab_slug"], bid, token, ctok)
-    return bid
-
-def handle_generic_booking(lab_info: Dict):
-    lab_slug = lab_info["slug"]
-    user_name  = (request.form.get("user_name")  or "").strip()
-    user_email = (request.form.get("user_email") or "").strip()
-    notes      = (request.form.get("notes")      or "").strip()
-    slots      = collect_selected_slots()
-    bd = (request.form.get("booking_date") or "").strip()
-    st = (request.form.get("start_time")   or "").strip()
-    et = (request.form.get("end_time")     or "").strip()
-    errors: List[str] = []
-    if not user_name:  errors.append("Name is required.")
-    if not user_email or "@" not in user_email: errors.append("A valid email is required.")
-    if slots:
-        for d,s,e in slots:
-            errors += check_booking_rules(lab_slug,d,s,e)
-            if has_conflict(lab_slug,d,s,e): errors.append(f"Conflict: {d} {s}–{e} already booked.")
-    else:
-        if not parse_date(bd): errors.append("Please choose a valid date.")
-        _st=parse_time(st); _et=parse_time(et)
-        if not _st or not _et: errors.append("Please choose valid start/end times.")
-        elif _et <= _st:        errors.append("End time must be after start time.")
-        if not errors: errors += check_booking_rules(lab_slug,bd,st,et)
-        if not errors and has_conflict(lab_slug,bd,st,et): errors.append("Time conflict.")
-    if errors:
-        for e in errors: flash(e,"error")
-        rules={k:LABS[lab_slug].get(k) for k in ("min_notice_hours","max_days_ahead","max_duration_hours")}
-        return render_template("lab_generic.html",lab=lab_info,form=request.form,days=availability_days(lab_slug),rules=rules)
-    base={"lab_slug":lab_slug,"booking_group_id":str(uuid.uuid4()) if slots else None,
-          "user_name":user_name,"user_email":user_email,"notes":notes,
-          "status":"pending","updated_at":None,"updated_by":None}
-    if slots:
-        ids=_insert_slots(base,slots); return redirect(url_for("booking_success",booking_id=ids[-1]))
-    else:
-        return redirect(url_for("booking_success",booking_id=_insert_single(base,bd,st,et)))
-
-@app.route("/labs/furnace", methods=["GET","POST"])
-def furnace():
-    lab_info={"brand":"iThemba Labs/U2ACN2","title":LABS["furnace"]["title"],"slug":"furnace",
-              "administrators":[{"name":"Dr Itani Madiba","contact":"06598853331"},
-                                {"name":"Mr Basil Martin","contact":"0796330278"}]}
-    if request.method=="POST": return handle_booking_submit(lab_info,"furnace")
-    form=merge_prefill(default_booking_form(),request.args)
-    rules={k:LABS["furnace"].get(k) for k in ("min_notice_hours","max_days_ahead","max_duration_hours")}
-    return render_template("furnace.html",lab=lab_info,form=form,days=availability_days("furnace"),rules=rules)
-
-@app.route("/labs/xps", methods=["GET","POST"])
-def xps():
-    lab_info={"brand":"iThemba Labs/U2ACN2","title":LABS["xps"]["title"],"slug":"xps",
-              "administrators":[{"name":"Dr Itani Madiba","contact":"06598853331"}]}
-    if request.method=="POST": return handle_booking_submit(lab_info,"xps")
-    form=merge_prefill(default_booking_form(),request.args)
-    rules={k:LABS["xps"].get(k) for k in ("min_notice_hours","max_days_ahead","max_duration_hours")}
-    return render_template("xps.html",lab=lab_info,form=form,days=availability_days("xps"),rules=rules)
-
-def handle_booking_submit(lab_info: Dict, kind: str):
-    lab_slug   = lab_info["slug"]
-    user_name  = (request.form.get("user_name")  or "").strip()
-    user_email = (request.form.get("user_email") or "").strip()
-    slots      = collect_selected_slots()
-    bd=(request.form.get("booking_date") or "").strip()
-    st=(request.form.get("start_time")   or "").strip()
-    et=(request.form.get("end_time")     or "").strip()
-    errors: List[str]=[]
-    if not user_name:  errors.append("Name is required.")
-    if not user_email or "@" not in user_email: errors.append("A valid email is required.")
-    if slots:
-        for d,s,e in slots:
-            if kind=="furnace" and not is_valid_furnace_block(s,e):
-                errors.append(f"Invalid furnace slot: {s}–{e}."); continue
-            errors+=check_booking_rules(lab_slug,d,s,e)
-            if has_conflict(lab_slug,d,s,e): errors.append(f"Conflict: {d} {s}–{e} already booked.")
-    else:
-        if not parse_date(bd): errors.append("Please choose a valid date.")
-        _st=parse_time(st); _et=parse_time(et)
-        if not _st or not _et: errors.append("Please choose valid start/end times.")
-        elif _et<=_st:          errors.append("End time must be after start time.")
-        if not errors and kind=="furnace" and not is_valid_furnace_block(st,et):
-            errors.append("Furnace booking must be 08:00–12:00 or 12:00–16:00.")
-        if not errors: errors+=check_booking_rules(lab_slug,bd,st,et)
-        if not errors and has_conflict(lab_slug,bd,st,et): errors.append("Time conflict.")
-    if errors:
-        for e in errors: flash(e,"error")
-        rules={k:LABS[lab_slug].get(k) for k in ("min_notice_hours","max_days_ahead","max_duration_hours")}
-        tmpl="furnace.html" if kind=="furnace" else "xps.html"
-        return render_template(tmpl,lab=lab_info,form=request.form,days=availability_days(lab_slug),rules=rules)
-    def _toi(v):
-        try: return int((v or "").strip())
-        except: return None
-    base={"lab_slug":lab_slug,"booking_group_id":str(uuid.uuid4()) if slots else None,
-          "user_name":user_name,"user_email":user_email,
-          "notes":(request.form.get("notes") or "").strip(),
-          "status":"pending","updated_at":None,"updated_by":None}
-    if kind=="furnace":
-        base.update({"nanomaterial_type":(request.form.get("nanomaterial_type") or "").strip(),
-                     "melting_point":(request.form.get("melting_point") or "").strip(),
-                     "material_density":(request.form.get("material_density") or "").strip(),
-                     "anneal_temp_c":(request.form.get("anneal_temp_c") or "").strip(),
-                     "anneal_time_h":(request.form.get("anneal_time_h") or "").strip(),
-                     "gas_type":(request.form.get("gas_type") or "").strip(),
-                     "pressure":(request.form.get("pressure") or "").strip(),
-                     "vacuum":request.form.get("vacuum")=="yes"})
-    else:
-        base.update({"sample_name":(request.form.get("sample_name") or "").strip(),
-                     "sample_count":_toi(request.form.get("sample_count")),
-                     "elements_of_interest":(request.form.get("elements_of_interest") or "").strip(),
-                     "analysis_type":(request.form.get("analysis_type") or "").strip(),
-                     "charge_neutralizer":request.form.get("charge_neutralizer")=="yes",
-                     "mounting_method":(request.form.get("mounting_method") or "").strip(),
-                     "outgassing_risk":(request.form.get("outgassing_risk") or "").strip()})
-    if slots:
-        ids=_insert_slots(base,slots); return redirect(url_for("booking_success",booking_id=ids[-1]))
-    else:
-        return redirect(url_for("booking_success",booking_id=_insert_single(base,bd,st,et)))
-
-@app.route("/bookings/<int:booking_id>")
-def booking_success(booking_id: int):
-    b = db_get_booking(booking_id)
-    if not b: flash("Booking not found.","error"); return redirect(url_for("index"))
-    lab_title = LABS.get(b.get("lab_slug",""),{}).get("title",b.get("lab_slug",""))
-    return render_template("success.html", b=b, lab_title=lab_title)
-
-@app.get("/bookings/<int:booking_id>/calendar.ics")
-def booking_ical(booking_id: int):
-    b = db_get_booking(booking_id)
-    if not b or b.get("status") != "approved": abort(404)
-    resp = make_response(_generate_ical(b))
-    resp.headers["Content-Type"] = "text/calendar; charset=utf-8"
-    resp.headers["Content-Disposition"] = f'attachment; filename="booking-{booking_id}.ics"'
-    return resp
-
-# -------------------------------------------------------- Booking history ---
-@app.route("/my-bookings", methods=["GET","POST"])
-def my_bookings():
-    bookings=[]; email=""
-    if request.method=="POST":
-        email=(request.form.get("email") or "").strip().lower()
-        if email and "@" in email:
-            bookings=db_list_bookings_by_email(email)
-            for b in bookings:
-                b["lab_title"]=LABS.get(b.get("lab_slug",""),{}).get("title",b.get("lab_slug",""))
-        else:
-            flash("Please enter a valid email address.","error")
-    return render_template("my_bookings.html", bookings=bookings, email=email)
-
-# ----------------------------------------- Recurring booking ----------------
-@app.route("/labs/<lab_slug>/recurring", methods=["GET","POST"])
-def lab_recurring(lab_slug: str):
     if lab_slug not in LABS: abort(404)
-    lab_info={"brand":"iThemba Labs/U2ACN2","title":LABS[lab_slug]["title"],"slug":lab_slug,"administrators":[]}
-    if request.method=="GET":
-        return render_template("recurring.html",lab=lab_info,form=default_booking_form(),weeks_range=range(1,9))
-    user_name =(request.form.get("user_name")  or "").strip()
-    user_email=(request.form.get("user_email") or "").strip()
-    notes     =(request.form.get("notes")      or "").strip()
-    start_date=(request.form.get("start_date") or "").strip()
-    start_time=(request.form.get("start_time") or "").strip()
-    end_time  =(request.form.get("end_time")   or "").strip()
-    weeks     =max(1,min(8,int(request.form.get("weeks","1") or 1)))
-    errors: List[str]=[]
-    if not user_name:  errors.append("Name is required.")
-    if not user_email or "@" not in user_email: errors.append("A valid email is required.")
-    sd=parse_date(start_date)
-    if not sd: errors.append("Please choose a valid start date.")
-    _st=parse_time(start_time); _et=parse_time(end_time)
-    if not _st or not _et: errors.append("Please choose valid start/end times.")
-    elif _et<=_st:          errors.append("End time must be after start time.")
-    good_slots=[]
-    if not errors:
-        for w in range(weeks):
-            d=sd+timedelta(weeks=w)
-            if d.weekday()>=5: errors.append(f"Week {w+1}: {d} is a weekend."); continue
-            re=check_booking_rules(lab_slug,d.isoformat(),start_time,end_time)
-            if re: errors+=re; continue
-            if has_conflict(lab_slug,d.isoformat(),start_time,end_time):
-                errors.append(f"Conflict on {d}: {start_time}–{end_time} already booked.")
-            else:
-                good_slots.append((d.isoformat(),start_time,end_time))
-    if errors:
-        for e in errors: flash(e,"error")
-        return render_template("recurring.html",lab=lab_info,form=request.form,weeks_range=range(1,9))
-    base={"lab_slug":lab_slug,"booking_group_id":str(uuid.uuid4()),
-          "user_name":user_name,"user_email":user_email,"notes":notes,
-          "status":"pending","updated_at":None,"updated_by":None}
-    ids=_insert_slots(base,good_slots)
-    flash(f"Submitted {len(ids)} recurring booking(s) — all pending approval.","ok")
-    return redirect(url_for("booking_success",booking_id=ids[-1]))
-
-# ---------------------------------------- One-click approve / reject --------
-@app.get("/bookings/approve/<token>")
-def approve_booking(token: str):
-    b=db_get_booking_by_token(token)
-    if not b: return _token_page("Already used","This link has already been used or is invalid.",False)
-    lab_slug=b["lab_slug"]
-    db_set_booking_status(int(b["id"]),"approved",updated_by="email-link")
-    fresh=db_get_booking(int(b["id"]))
-    if fresh: notify_user_approved(lab_slug,fresh)
-    return _token_page("Booking approved ✓",
-        f"Approved for <strong>{b['user_name']}</strong> — {_slot_str(b)}.<br/>"
-        f"Confirmation sent to {b['user_email']}.",True,lab_slug=lab_slug)
-
-@app.get("/bookings/reject/<token>")
-def reject_booking_get(token: str):
-    b=db_get_booking_by_token(token)
-    if not b: return _token_page("Already used","This link has already been used or is invalid.",False)
-    return render_template("reject_form.html",b=b,
-                           lab_title=LABS.get(b["lab_slug"],{}).get("title",b["lab_slug"]),token=token)
-
-@app.post("/bookings/reject/<token>")
-def reject_booking_post(token: str):
-    b=db_get_booking_by_token(token)
-    if not b: return _token_page("Already used","This link has already been used or is invalid.",False)
-    reason=(request.form.get("reason") or "").strip()
-    lab_slug=b["lab_slug"]
-    db_set_booking_status(int(b["id"]),"rejected",rejection_reason=reason,updated_by="email-link")
-    notify_user_rejected(lab_slug,b,reason=reason)
-    return _token_page("Booking rejected",
-        f"Rejected for <strong>{b['user_name']}</strong> — {_slot_str(b)}.<br/>"
-        f"User notified at {b['user_email']}.",False,lab_slug=lab_slug)
-
-# ---------------------------------------------- User self-cancellation ------
-@app.get("/bookings/cancel/<token>")
-def cancel_booking_get(token: str):
-    b=db_get_booking_by_cancel_token(token)
-    if not b: return _token_page("Invalid link","This cancellation link has already been used or is invalid.",False)
-    return render_template("cancel_confirm.html",b=b,
-                           lab_title=LABS.get(b["lab_slug"],{}).get("title",b["lab_slug"]),token=token)
-
-@app.post("/bookings/cancel/<token>")
-def cancel_booking_post(token: str):
-    b=db_get_booking_by_cancel_token(token)
-    if not b: return _token_page("Invalid link","This cancellation link has already been used or is invalid.",False)
-    db_cancel_booking(int(b["id"]))
-    notify_user_cancelled(b["lab_slug"],b)
-    return _token_page("Booking cancelled",
-        f"Your booking ({_slot_str(b)}) has been cancelled. Confirmation sent to {b['user_email']}.",False)
-
-def _token_page(title: str, message: str, ok: bool, lab_slug: str="") -> str:
-    colour=  "ok" if ok else "error"
-    admin_lnk=(f'<p><a href="{url_for("admin_lab",lab_slug=lab_slug)}">Go to admin panel</a></p>'
-               if lab_slug else "")
-    return render_template("token_result.html",title=title,message=message,
-                           colour=colour,admin_link=admin_lnk)
-
-# --------------------------------------- Admin panel approve / reject --------
-@app.post("/admin/<lab_slug>/approve/<int:booking_id>")
-def admin_approve_booking(lab_slug: str, booking_id: int):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    b=db_get_booking(booking_id)
-    if not b or b.get("lab_slug")!=lab_slug:
-        flash("Booking not found.","error"); return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    note=(request.form.get("approval_note") or "").strip()
-    db_set_booking_status(booking_id,"approved",approval_note=note,updated_by=session.get("admin_username",""))
-    fresh=db_get_booking(booking_id)
-    if fresh: notify_user_approved(lab_slug,fresh,note=note)
-    flash(f"Booking #{booking_id} approved.","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-@app.post("/admin/<lab_slug>/reject/<int:booking_id>")
-def admin_reject_booking(lab_slug: str, booking_id: int):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    b=db_get_booking(booking_id)
-    if not b or b.get("lab_slug")!=lab_slug:
-        flash("Booking not found.","error"); return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    reason=(request.form.get("reason") or "").strip()
-    db_set_booking_status(booking_id,"rejected",rejection_reason=reason,updated_by=session.get("admin_username",""))
-    notify_user_rejected(lab_slug,b,reason=reason)
-    flash(f"Booking #{booking_id} rejected.","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-# ------------------------------------- Admin bulk approve / reject ----------
-@app.post("/admin/<lab_slug>/bulk-action")
-def admin_bulk_action(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    action =(request.form.get("action") or "").strip()
-    ids    =[int(x) for x in request.form.getlist("booking_ids") if x.isdigit()]
-    reason =(request.form.get("bulk_reason") or "").strip()
-    actor  = session.get("admin_username","")
-    if not ids or action not in ("approve","reject"):
-        flash("No bookings selected or invalid action.","error")
-        return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    count=0
-    for bid in ids:
-        b=db_get_booking(bid)
-        if not b or b.get("lab_slug")!=lab_slug: continue
-        status="approved" if action=="approve" else "rejected"
-        db_set_booking_status(bid,status,rejection_reason=reason if action=="reject" else "",updated_by=actor)
-        fresh=db_get_booking(bid)
-        if fresh:
-            if action=="approve": notify_user_approved(lab_slug,fresh)
-            else:                 notify_user_rejected(lab_slug,fresh,reason=reason)
-        count+=1
-    flash(f"Bulk {action}d {count} booking(s).","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-# ----------------------------------------------- Admin per-lab dashboard ---
-@app.route("/admin/<lab_slug>")
-def admin_lab(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    rows=db_list_bookings(lab_slug); days=availability_days(lab_slug)
-    tmpl=("admin_furnace.html" if lab_slug=="furnace"
-          else "admin_xps.html" if lab_slug=="xps"
-          else "admin_generic.html")
-    return render_template(tmpl,lab_title=LABS[lab_slug]["title"],lab_slug=lab_slug,
-                           rows=rows,days=days,admin_username=session.get("admin_username",""),
-                           smtp_ready=smtp_ready())
-
-@app.post("/admin/<lab_slug>/reserve")
-def admin_reserve_slots(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    slots  =collect_selected_slots()
-    bd=(request.form.get("booking_date") or "").strip()
-    st=(request.form.get("start_time")   or "").strip()
-    et=(request.form.get("end_time")     or "").strip()
-    u_name =(request.form.get("user_name")  or "").strip() or "ADMIN RESERVED"
-    u_email=(request.form.get("user_email") or "").strip() or SMTP_USER
-    notes  =(request.form.get("notes")      or "").strip() or "Reserved by admin"
-    actor  =session.get("admin_username","")
-    errors: List[str]=[]
-    if slots:
-        for d,s,e in slots:
-            if lab_slug=="furnace" and not is_valid_furnace_block(s,e):
-                errors.append(f"Invalid furnace slot: {s}–{e}.")
-            elif has_conflict(lab_slug,d,s,e): errors.append(f"Conflict: {d} {s}–{e} already booked.")
-    else:
-        if not parse_date(bd): errors.append("Please choose a valid date.")
-        _st=parse_time(st); _et=parse_time(et)
-        if not _st or not _et: errors.append("Please choose valid start/end times.")
-        elif _et<=_st:          errors.append("End time must be after start time.")
-        if not errors and lab_slug=="furnace" and not is_valid_furnace_block(st,et):
-            errors.append("Furnace booking must be 08:00–12:00 or 12:00–16:00.")
-        if not errors and has_conflict(lab_slug,bd,st,et): errors.append("Time conflict.")
-    if errors:
-        for e in errors: flash(e,"error")
-        return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    now_iso=datetime.utcnow().isoformat(timespec="seconds")+"Z"
-    created=0
-    for d,s,e in (slots or [(bd,st,et)]):
-        db_insert_booking({"lab_slug":lab_slug,"booking_group_id":str(uuid.uuid4()) if slots else None,
-                            "user_name":u_name,"user_email":u_email,"notes":notes,
-                            "booking_date":d,"start_time":s,"end_time":e,
-                            "status":"approved","approval_token":None,"cancel_token":None,
-                            "updated_at":now_iso,"updated_by":actor})
-        created+=1
-    flash(f"Reserved {created} slot(s).","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-@app.get("/admin/<lab_slug>/edit/<int:booking_id>")
-def admin_edit_booking(lab_slug: str, booking_id: int):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    b=db_get_booking(booking_id)
-    if not b or b.get("lab_slug")!=lab_slug:
-        flash("Booking not found.","error"); return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    return render_template("admin_edit.html",lab_slug=lab_slug,lab_title=LABS[lab_slug]["title"],
-                           b=b,days=availability_days(lab_slug),smtp_ready=smtp_ready(),
-                           admin_username=session.get("admin_username",""))
-
-@app.post("/admin/<lab_slug>/edit/<int:booking_id>")
-def admin_update_booking(lab_slug: str, booking_id: int):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    b=db_get_booking(booking_id)
-    if not b or b.get("lab_slug")!=lab_slug:
-        flash("Booking not found.","error"); return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    nd=(request.form.get("booking_date") or "").strip()
-    ns=(request.form.get("start_time")   or "").strip()
-    ne=(request.form.get("end_time")     or "").strip()
-    errors: List[str]=[]
-    if not parse_date(nd): errors.append("Please choose a valid date.")
-    _st=parse_time(ns); _et=parse_time(ne)
-    if not _st or not _et: errors.append("Please choose valid start/end times.")
-    elif _et<=_st:          errors.append("End time must be after start time.")
-    if not errors and has_conflict(lab_slug,nd,ns,ne,exclude_id=booking_id): errors.append("Time conflict.")
-    if errors:
-        for e in errors: flash(e,"error")
-        return redirect(url_for("admin_edit_booking",lab_slug=lab_slug,booking_id=booking_id))
-    old=_slot_str(b); new=f"{nd} {ns}–{ne}"
-    db_update_booking_time(booking_id,nd,ns,ne,updated_by=session.get("admin_username",""))
-    if smtp_ready():
-        _send_async(b.get("user_email",""),f"Booking updated: {LABS[lab_slug]['title']}",
-                    f"Hello {b.get('user_name')},\n\nYour booking has been rescheduled.\n\n"
-                    f"  Old: {old}\n  New: {new}\n\nRegards,\n{SMTP_FROM_NAME}\n")
-        flash("Booking updated and user notified.","ok")
-    else:
-        flash("Booking updated.","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-@app.post("/admin/<lab_slug>/delete/<int:booking_id>")
-def admin_delete_booking(lab_slug: str, booking_id: int):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    b=db_get_booking(booking_id)
-    if not b or b.get("lab_slug")!=lab_slug:
-        flash("Booking not found.","error"); return redirect(url_for("admin_lab",lab_slug=lab_slug))
-    db_delete_booking(booking_id)
-    if smtp_ready():
-        _send_async(b.get("user_email",""),f"Booking cancelled: {LABS[lab_slug]['title']}",
-                    f"Hello {b.get('user_name')},\n\nYour booking ({_slot_str(b)}) has been cancelled "
-                    f"by the lab administrator.\n\nRegards,\n{SMTP_FROM_NAME}\n")
-        flash("Booking deleted and user notified.","ok")
-    else:
-        flash("Booking deleted.","ok")
-    return redirect(url_for("admin_lab",lab_slug=lab_slug))
-
-# ---------------------------------------------------------------- Export ----
-def export_rows(lab_slug: str) -> List[Dict]:
-    return [{c:r.get(c,"") for c in EXPORT_COLUMNS} for r in db_list_bookings(lab_slug)]
-
-@app.get("/admin/export/<lab_slug>.csv")
-def admin_export_csv(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    si=StringIO(); writer=csv.DictWriter(si,fieldnames=EXPORT_COLUMNS)
-    writer.writeheader(); writer.writerows(export_rows(lab_slug))
-    resp=make_response(si.getvalue())
-    resp.headers["Content-Type"]="text/csv; charset=utf-8"
-    resp.headers["Content-Disposition"]=f'attachment; filename="{lab_slug}_bookings.csv"'
-    return resp
-
-@app.get("/admin/export/<lab_slug>.xlsx")
-def admin_export_xlsx(lab_slug: str):
-    if lab_slug not in LABS: abort(404)
-    guard=require_admin(lab_slug)
-    if guard: return guard
-    rows=export_rows(lab_slug); wb=Workbook(); ws=wb.active; ws.title="bookings"
-    ws.append(EXPORT_COLUMNS)
-    for r in rows: ws.append([r.get(c,"") for c in EXPORT_COLUMNS])
-    bio=BytesIO(); wb.save(bio); bio.seek(0)
-    resp=make_response(bio.read())
-    resp.headers["Content-Type"]="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    resp.headers["Content-Disposition"]=f'attachment; filename="{lab_slug}_bookings.xlsx"'
-    return resp
-
-# ---------------------------------------------- Reminder cron endpoint ------
-def _run_reminders():
-    try:
-        init_db()
-        for b in db_get_reminder_candidates():
+    if lab_slug in ("furnace","xps"): return redirect(booking_url_for(lab_slug))
+    lab = LABS[lab_slug]
+    form = merge_prefill(default_booking_form(), request.args)
+    errors = []
+    if request.method == "POST":
+        slots = collect_selected_slots()
+        user_name  = (request.form.get("user_name") or "").strip()
+        user_email = (request.form.get("user_email") or "").strip()
+        notes      = (request.form.get("notes") or "").strip()
+        if not user_name:  errors.append("Name is required.")
+        if not user_email or "@" not in user_email: errors.append("Valid email required.")
+        if not slots: errors.append("Select at least one slot.")
+        for d, s, e in slots:
+            errs = check_booking_rules(lab_slug, d, s, e)
+            errors.extend(errs)
+            if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is already taken.")
+        if not errors:
+            group_id = str(uuid.uuid4()) if len(slots) > 1 else None
+            first_id = None
+            for d, s, e in slots:
+                payload = {"lab_slug": lab_slug, "booking_group_id": group_id,
+                           "user_name": user_name, "user_email": user_email,
+                           "notes": notes, "booking_date": d, "start_time": s, "end_time": e,
+                           "status": "pending", "approval_token": str(uuid.uuid4()),
+                           "cancel_token": str(uuid.uuid4())}
+                bid = db_insert_booking(payload)
+                if first_id is None: first_id = bid
+            b = db_get_booking(first_id)
             try:
-                notify_user_reminder(b["lab_slug"],b)
-                db_mark_reminder_sent(int(b["id"]))
-            except Exception:
-                pass
-    except Exception:
-        pass
+                notify_user_submission(lab_slug, b)
+                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
+                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
+                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+            except Exception: pass
+            flash(f"Booking submitted for {lab['title']}! You'll receive a confirmation email.", "success")
+            return redirect(url_for("lab_generic", lab_slug=lab_slug))
+    days = availability_days(lab_slug)
+    return render_template("lab_generic.html", lab_slug=lab_slug,
+                           lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           form=form, errors=errors, days=days,
+                           availability_url=url_for("lab_availability", lab_slug=lab_slug))
 
-@app.get("/internal/send-reminders")
-def trigger_reminders():
-    """Call once daily from a cron job / Render cron service."""
-    threading.Thread(target=_run_reminders,daemon=True).start()
-    return {"status":"reminders triggered"}, 200
+@app.route("/furnace", methods=["GET","POST"])
+def furnace():
+    lab_slug = "furnace"
+    lab = LABS[lab_slug]
+    form = merge_prefill(default_booking_form(), request.args)
+    errors = []
+    if request.method == "POST":
+        slots = collect_selected_slots()
+        user_name  = (request.form.get("user_name") or "").strip()
+        user_email = (request.form.get("user_email") or "").strip()
+        for d, s, e in slots:
+            if not is_valid_furnace_block(s, e):
+                errors.append(f"Invalid furnace slot: {s}–{e}.")
+        if not user_name:  errors.append("Name is required.")
+        if not user_email or "@" not in user_email: errors.append("Valid email required.")
+        if not slots: errors.append("Select at least one slot.")
+        for d, s, e in slots:
+            errs = check_booking_rules(lab_slug, d, s, e)
+            errors.extend(errs)
+            if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is taken.")
+        if not errors:
+            group_id = str(uuid.uuid4()) if len(slots) > 1 else None
+            first_id = None
+            for d, s, e in slots:
+                payload = {
+                    "lab_slug": lab_slug, "booking_group_id": group_id,
+                    "user_name": user_name, "user_email": user_email,
+                    "nanomaterial_type": (request.form.get("nanomaterial_type") or "").strip(),
+                    "melting_point": (request.form.get("melting_point") or "").strip(),
+                    "material_density": (request.form.get("material_density") or "").strip(),
+                    "anneal_temp_c": (request.form.get("anneal_temp_c") or "").strip(),
+                    "anneal_time_h": (request.form.get("anneal_time_h") or "").strip(),
+                    "gas_type": (request.form.get("gas_type") or "").strip(),
+                    "pressure": (request.form.get("pressure") or "").strip(),
+                    "vacuum": request.form.get("vacuum","no") == "yes",
+                    "notes": (request.form.get("notes") or "").strip(),
+                    "booking_date": d, "start_time": s, "end_time": e,
+                    "status": "pending", "approval_token": str(uuid.uuid4()),
+                    "cancel_token": str(uuid.uuid4())}
+                bid = db_insert_booking(payload)
+                if first_id is None: first_id = bid
+            b = db_get_booking(first_id)
+            try:
+                notify_user_submission(lab_slug, b)
+                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
+                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
+                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+            except Exception: pass
+            flash("Furnace booking submitted!", "success")
+            return redirect(url_for("furnace"))
+    days = availability_days(lab_slug)
+    return render_template("furnace.html", lab_slug=lab_slug,
+                           lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           form=form, errors=errors, days=days,
+                           availability_url=url_for("lab_availability", lab_slug=lab_slug))
 
-# ---------------------------------------------------------------- Bootstrap -
-try:
-    init_db()
-except Exception:
-    pass
+@app.route("/xps", methods=["GET","POST"])
+def xps():
+    lab_slug = "xps"
+    lab = LABS[lab_slug]
+    form = merge_prefill(default_booking_form(), request.args)
+    errors = []
+    if request.method == "POST":
+        slots = collect_selected_slots()
+        user_name  = (request.form.get("user_name") or "").strip()
+        user_email = (request.form.get("user_email") or "").strip()
+        if not user_name:  errors.append("Name is required.")
+        if not user_email or "@" not in user_email: errors.append("Valid email required.")
+        if not slots: errors.append("Select at least one slot.")
+        for d, s, e in slots:
+            errs = check_booking_rules(lab_slug, d, s, e)
+            errors.extend(errs)
+            if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is taken.")
+        if not errors:
+            group_id = str(uuid.uuid4()) if len(slots) > 1 else None
+            first_id = None
+            for d, s, e in slots:
+                payload = {
+                    "lab_slug": lab_slug, "booking_group_id": group_id,
+                    "user_name": user_name, "user_email": user_email,
+                    "sample_name": (request.form.get("sample_name") or "").strip(),
+                    "sample_count": request.form.get("sample_count"),
+                    "elements_of_interest": (request.form.get("elements_of_interest") or "").strip(),
+                    "analysis_type": (request.form.get("analysis_type") or "").strip(),
+                    "charge_neutralizer": request.form.get("charge_neutralizer","no") == "yes",
+                    "mounting_method": (request.form.get("mounting_method") or "").strip(),
+                    "outgassing_risk": (request.form.get("outgassing_risk") or "").strip(),
+                    "notes": (request.form.get("notes") or "").strip(),
+                    "booking_date": d, "start_time": s, "end_time": e,
+                    "status": "pending", "approval_token": str(uuid.uuid4()),
+                    "cancel_token": str(uuid.uuid4())}
+                bid = db_insert_booking(payload)
+                if first_id is None: first_id = bid
+            b = db_get_booking(first_id)
+            try:
+                notify_user_submission(lab_slug, b)
+                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
+                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
+                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+            except Exception: pass
+            flash("XPS booking submitted!", "success")
+            return redirect(url_for("xps"))
+    days = availability_days(lab_slug)
+    return render_template("xps.html", lab_slug=lab_slug,
+                           lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           form=form, errors=errors, days=days,
+                           availability_url=url_for("lab_availability", lab_slug=lab_slug))
+
+@app.get("/approve/<token>")
+def approve_booking(token: str):
+    b = db_get_booking_by_token(token)
+    if not b: return "Link invalid or already used.", 404
+    db_set_booking_status(b["id"], "approved")
+    try: notify_user_approved(b["lab_slug"], b)
+    except Exception: pass
+    return f"<p>Booking #{b['id']} approved. <a href='/'>Home</a></p>"
+
+@app.get("/reject/<token>")
+def reject_booking(token: str):
+    b = db_get_booking_by_token(token)
+    if not b: return "Link invalid or already used.", 404
+    db_set_booking_status(b["id"], "rejected")
+    try: notify_user_rejected(b["lab_slug"], b)
+    except Exception: pass
+    return f"<p>Booking #{b['id']} rejected. <a href='/'>Home</a></p>"
+
+@app.route("/cancel/<token>", methods=["GET","POST"])
+def cancel_booking_get(token: str):
+    b = db_get_booking_by_cancel_token(token)
+    if not b: return "Cancellation link invalid or already used.", 404
+    if request.method == "POST":
+        db_cancel_booking(b["id"])
+        try: notify_user_cancelled(b["lab_slug"], b)
+        except Exception: pass
+        return f"<p>Booking #{b['id']} cancelled. <a href='/'>Home</a></p>"
+    return (f"<p>Cancel booking #{b['id']} for {b['lab_slug']} on {b['booking_date']}?</p>"
+            f"<form method='post'><button type='submit'>Confirm Cancellation</button></form>")
+
+@app.get("/reminders/send")
+def send_reminders():
+    candidates = db_get_reminder_candidates()
+    sent = 0
+    for b in candidates:
+        try:
+            from app import notify_user_reminder
+            notify_user_reminder(b["lab_slug"], b)
+            db_mark_reminder_sent(b["id"])
+            sent += 1
+        except Exception:
+            pass
+    return {"sent": sent}, 200
+
+def notify_user_reminder(lab_slug: str, b: Dict) -> None:
+    if not smtp_ready(): return
+    lab_title = LABS[lab_slug]["title"]
+    body = (
+        f"Hello {b['user_name']},\n\nReminder: you have a booking tomorrow.\n\n"
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(b["user_email"], f"Reminder: booking tomorrow — {lab_title}", body)
 
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")),debug=True)
+    app.run(debug=True)

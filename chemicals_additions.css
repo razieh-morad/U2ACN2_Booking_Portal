@@ -1,0 +1,79 @@
+/*
+ * Chemical Inventory additions for U2ACN2 Nanolab portal
+ * Append this content to your existing static/style.css
+ * Or @import this file from style.css
+ */
+
+/* ── CSS variables (ensure these exist in your base style.css) ── */
+:root {
+  --accent:     #0e6b99;
+  --text:       #1a2332;
+  --muted:      #6b7a8d;
+  --border:     #dde3ea;
+  --card-bg:    #ffffff;
+  --hover-bg:   #f5f7fa;
+  --table-head: #f0f4f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent:     #3fa9d9;
+    --text:       #e8edf3;
+    --muted:      #8fa3b8;
+    --border:     #2d3a4a;
+    --card-bg:    #1a2535;
+    --hover-bg:   #1e2d3e;
+    --table-head: #16202e;
+  }
+}
+
+/* ── Chemical inventory nav link on homepage ── */
+.chem-nav-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem 1.5rem;
+  background: linear-gradient(135deg, var(--accent) 0%, #0a4f72 100%);
+  border-radius: 12px;
+  color: #fff;
+  text-decoration: none;
+  transition: transform .15s, box-shadow .2s;
+  margin-bottom: 1.5rem;
+}
+.chem-nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(14,107,153,.35);
+}
+.chem-nav-card .icon { font-size: 2rem; }
+.chem-nav-card .info { flex: 1; }
+.chem-nav-card .info h3 { margin: 0 0 .2rem; font-size: 1.1rem; }
+.chem-nav-card .info p  { margin: 0; font-size: .85rem; opacity: .8; }
+.chem-nav-card .arrow   { font-size: 1.4rem; opacity: .7; }
+.chem-nav-card .badge-count {
+  background: rgba(255,255,255,.2);
+  border-radius: 20px;
+  padding: .15rem .6rem;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+/* ── Admin list on admin portal page ── */
+.admin-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.admin-list li {
+  padding: .8rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.admin-list li:last-child { border-bottom: none; }
+.badge-warn {
+  background: #fff3cd;
+  color: #856404;
+  font-size: .78rem;
+  padding: .2rem .55rem;
+  border-radius: 20px;
+  font-weight: 700;
+  margin-left: .4rem;
+}

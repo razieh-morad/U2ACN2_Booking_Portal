@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Purchase Request — U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    .purchase-hero {
+      background: linear-gradient(135deg, #1a3a4a 0%, var(--accent) 100%);
+      padding: 2.5rem 0 2rem;
+      margin-bottom: 2rem;
+    }
+    .purchase-hero h1 { color:#fff; margin:0 0 .4rem; }
+    .purchase-hero p  { color:rgba(255,255,255,.7); margin:0; }
+
+    .purchase-form-card {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .section-label {
+      font-size:.78rem; font-weight:700; letter-spacing:.1em;
+      text-transform:uppercase; color:var(--accent);
+      margin: 1.4rem 0 .7rem;
+    }
+    .field { margin-bottom:.9rem; }
+    .field label {
+      display:block; font-size:.85rem; font-weight:600;
+      color:var(--text); margin-bottom:.3rem;
+    }
+    .field label .req { color:#e53935; margin-left:.2rem; }
+    .field input, .field select, .field textarea {
+      width:100%; padding:.65rem .85rem;
+      border:1.5px solid var(--border); border-radius:8px;
+      font-size:.95rem; background:var(--card-bg); color:var(--text);
+      box-sizing:border-box; transition:border-color .2s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline:none; border-color:var(--accent);
+    }
+    .field textarea { resize:vertical; min-height:80px; }
+    .field .hint { font-size:.78rem; color:var(--muted); margin-top:.3rem; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
+    .form-row-3 { display:grid; grid-template-columns:2fr 1fr 1fr; gap:.8rem; }
+
+    .btn-submit-big {
+      width:100%; padding:.9rem; margin-top:1.2rem;
+      background:var(--accent); color:#fff;
+      border:none; border-radius:10px;
+      font-size:1rem; font-weight:700; cursor:pointer;
+      transition:opacity .2s;
+    }
+    .btn-submit-big:hover { opacity:.88; }
+
+    .flash { padding:.8rem 1.2rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
+    .flash.error { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a; }
+    .error-list { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a;
+                  border-radius:8px; padding:.8rem 1.2rem; margin-bottom:1rem; }
+    .error-list li { font-size:.88rem; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 style="font-size:1.3rem;margin:0;">🛒 Purchase Request</h1>
+      <p class="sub" style="margin:0;">Request a new chemical for the Nanolab inventory</p>
+    </div>
+    <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">
+      ← Back to Inventory
+    </a>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.5rem;">
+  <div class="purchase-form-card">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if errors %}
+    <ul class="error-list">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="card">
+      <form method="post" action="/chemicals/purchase">
+
+        <div class="section-label">1 — Material Details</div>
+
+        <div class="field">
+          <label>Material Name <span class="req">*</span></label>
+          <input type="text" name="material_name" value="{{ prefill.material_name }}"
+                 placeholder="e.g. Titanium Carbide MXene" required/>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Chemical Formula</label>
+            <input type="text" name="formula" value="{{ prefill.formula }}"
+                   placeholder="e.g. Ti3C2Tx"/>
+          </div>
+          <div class="field">
+            <label>CAS Number</label>
+            <input type="text" name="cas_number" value="{{ prefill.cas_number }}"
+                   placeholder="e.g. 1317-70-0"/>
+            <div class="hint">
+              <a href="https://commonchemistry.cas.org/" target="_blank"
+                 style="color:var(--accent);">Find CAS number ↗</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Specifications</label>
+          <textarea name="specifications" placeholder="Grade, purity, particle size, supplier preference, packaging…">{{ prefill.get('specifications','') }}</textarea>
+        </div>
+
+        <div class="section-label">2 — Quantity</div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Amount <span class="req">*</span></label>
+            <input type="text" name="amount" value="{{ prefill.get('amount','') }}"
+                   placeholder="e.g. 100" required/>
+          </div>
+          <div class="field">
+            <label>Unit <span class="req">*</span></label>
+            <select name="unit">
+              <option value="g">g</option>
+              <option value="mg">mg</option>
+              <option value="kg">kg</option>
+              <option value="mL">mL</option>
+              <option value="L">L</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-label">3 — Requester Information</div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>First Name <span class="req">*</span></label>
+            <input type="text" name="requester_first_name"
+                   value="{{ prefill.get('requester_first_name','') }}" required/>
+          </div>
+          <div class="field">
+            <label>Surname <span class="req">*</span></label>
+            <input type="text" name="requester_surname"
+                   value="{{ prefill.get('requester_surname','') }}" required/>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Email <span class="req">*</span></label>
+          <input type="email" name="requester_email"
+                 value="{{ prefill.get('requester_email','') }}"
+                 placeholder="name@university.ac.za" required/>
+        </div>
+
+        <div class="field">
+          <label>Additional Comments</label>
+          <textarea name="comments"
+                    placeholder="Budget code, urgency, preferred vendor link, delivery notes…">{{ prefill.get('comments','') }}</textarea>
+        </div>
+
+        <button type="submit" class="btn-submit-big">Submit Purchase Request</button>
+
+        <p style="font-size:.8rem;color:var(--muted);text-align:center;margin-top:.8rem;">
+          The lab admin and relevant contacts will be notified by email.
+        </p>
+      </form>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>
