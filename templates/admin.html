@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ lab_title }}{% endblock %}
+
+{% block body %}
+<main class="container page-main">
+
+  <div class="page-header">
+    <div>
+      <a href="/admin" class="back-link">← Admin Portal</a>
+      <h1>{{ lab_title }}</h1>
+      <p class="page-sub">Logged in as <strong>{{ admin_username }}</strong></p>
+    </div>
+    <a href="/admin/logout" class="btn btn-ghost">Logout</a>
+  </div>
+
+  <div class="card" style="overflow-x:auto;">
+    {% if bookings %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Date</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Status</th>
+          <th>Submitted</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bookings %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.user_name }}</td>
+          <td><a href="mailto:{{ b.user_email }}">{{ b.user_email }}</a></td>
+          <td>{{ b.booking_date }}</td>
+          <td>{{ b.start_time[:5] }}</td>
+          <td>{{ b.end_time[:5] }}</td>
+          <td>
+            <span class="status-badge status-{{ b.status }}">{{ b.status }}</span>
+          </td>
+          <td>{{ b.created_at[:10] if b.created_at else '—' }}</td>
+          <td>
+            <a href="/admin/{{ lab_slug }}/booking/{{ b.id }}" class="btn btn-sm btn-ghost">Review</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>No bookings yet for this lab.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</main>
+{% endblock %}

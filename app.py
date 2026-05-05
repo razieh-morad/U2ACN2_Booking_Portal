@@ -340,7 +340,11 @@ def init_db():
         conn.commit()
         conn.close()
     _db_initialized = True
-    _seed_chemicals()
+    try:
+        _seed_chemicals()
+    except Exception as _seed_err:
+        import sys
+        print(f"[WARNING] Chemical seed failed: {_seed_err}", file=sys.stderr)
 
 # ================================================ Chemical DB helpers =======
 
@@ -1363,6 +1367,34 @@ def db_get_reminder_candidates() -> List[Dict[str, Any]]:
 
 # ================================================================= ROUTES ===
 
+
+@app.get("/debug/init")
+def debug_init():
+    """Diagnostic route — remove after confirming app works."""
+    import traceback
+    results = {}
+    try:
+        init_db()
+        results["init_db"] = "OK"
+    except Exception as e:
+        results["init_db"] = f"ERROR: {traceback.format_exc()}"
+    try:
+        chems = _get_chemicals_all()
+        results["chemicals_count"] = len(chems)
+    except Exception as e:
+        results["chemicals_count"] = f"ERROR: {e}"
+    try:
+        chem_reqs = _list_chemical_requests()
+        results["chem_requests_count"] = len(chem_reqs)
+    except Exception as e:
+        results["chem_requests_count"] = f"ERROR: {e}"
+    try:
+        prs = _list_purchase_requests()
+        results["purchase_requests_count"] = len(prs)
+    except Exception as e:
+        results["purchase_requests_count"] = f"ERROR: {e}"
+    return jsonify(results)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}, 200
@@ -1371,8 +1403,12 @@ def health():
 def index():
     init_db()
     pending = db_pending_counts()
-    chem_pending = len(_list_chemical_requests(status="pending"))
-    purchase_pending = len(_list_purchase_requests(status="pending"))
+    try:
+        chem_pending = len(_list_chemical_requests(status="pending"))
+        purchase_pending = len(_list_purchase_requests(status="pending"))
+    except Exception:
+        chem_pending = 0
+        purchase_pending = 0
     labs = sorted(
         [{"title": LABS[k]["title"], "slug": k, "subtitle": LABS[k]["subtitle"],
           "booking_url": booking_url_for(k),
@@ -1880,20 +1916,6 @@ def cancel_booking_get(token: str):
     return (f"<p>Cancel booking #{b['id']} for {b['lab_slug']} on {b['booking_date']}?</p>"
             f"<form method='post'><button type='submit'>Confirm Cancellation</button></form>")
 
-@app.get("/reminders/send")
-def send_reminders():
-    candidates = db_get_reminder_candidates()
-    sent = 0
-    for b in candidates:
-        try:
-            from app import notify_user_reminder
-            notify_user_reminder(b["lab_slug"], b)
-            db_mark_reminder_sent(b["id"])
-            sent += 1
-        except Exception:
-            pass
-    return {"sent": sent}, 200
-
 def notify_user_reminder(lab_slug: str, b: Dict) -> None:
     if not smtp_ready(): return
     lab_title = LABS[lab_slug]["title"]
@@ -1903,6 +1925,19 @@ def notify_user_reminder(lab_slug: str, b: Dict) -> None:
         f"Regards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Reminder: booking tomorrow — {lab_title}", body)
+
+@app.get("/reminders/send")
+def send_reminders():
+    candidates = db_get_reminder_candidates()
+    sent = 0
+    for b in candidates:
+        try:
+            notify_user_reminder(b["lab_slug"], b)
+            db_mark_reminder_sent(b["id"])
+            sent += 1
+        except Exception:
+            pass
+    return {"sent": sent}, 200
 
 if __name__ == "__main__":
     app.run(debug=True)

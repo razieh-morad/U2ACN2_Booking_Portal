@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block title %}U2ACN2 Nanolab{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/style.css"/>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a href="/" class="topbar-brand">
+      <span class="brand-icon">⚛</span>
+      <div>
+        <div class="brand-name">U2ACN2 Nanolab</div>
+        <div class="brand-sub">Equipment &amp; Chemical Portal</div>
+      </div>
+    </a>
+    <nav class="topbar-nav">
+      <a href="/">Labs</a>
+      <a href="/chemicals">Chemicals</a>
+      <a href="/admin">Admin</a>
+    </nav>
+  </div>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-container container">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">
+      <span class="flash-icon">{% if category == 'success' %}✓{% else %}!{% endif %}</span>
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+{% block body %}{% endblock %}
+
+<footer class="site-footer">
+  <div class="container">
+    <p>U2ACN2 Nanolab Portal &mdash; University of the Western Cape</p>
+  </div>
+</footer>
+</body>
+</html>

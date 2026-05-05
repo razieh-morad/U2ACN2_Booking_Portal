@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Chemical Admin — U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    .admin-tabs { display:flex; gap:.3rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+    .tab-btn {
+      padding:.55rem 1.2rem; border-radius:8px; border:1.5px solid var(--border);
+      background:var(--card-bg); color:var(--text); font-weight:600; font-size:.88rem;
+      cursor:pointer; transition:all .15s;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background:var(--accent); color:#fff; border-color:var(--accent);
+    }
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+
+    /* Table */
+    .data-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    .data-table th {
+      text-align:left; padding:.6rem .8rem;
+      background:var(--table-head); color:var(--muted);
+      font-size:.75rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+      border-bottom:2px solid var(--border);
+    }
+    .data-table td {
+      padding:.6rem .8rem; border-bottom:1px solid var(--border);
+      vertical-align:top;
+    }
+    .data-table tr:hover td { background:var(--hover-bg); }
+    .data-table .mono { font-family:'JetBrains Mono',monospace; font-size:.82rem; }
+
+    /* Status badges */
+    .badge {
+      display:inline-block; font-size:.72rem; font-weight:700; letter-spacing:.05em;
+      text-transform:uppercase; padding:.2rem .6rem; border-radius:20px;
+    }
+    .badge-pending   { background:#fff3cd; color:#856404; }
+    .badge-approved  { background:#d1e7dd; color:#0f5132; }
+    .badge-rejected  { background:#f8d7da; color:#842029; }
+    .badge-fulfilled { background:#cfe2ff; color:#084298; }
+    .badge-purchased { background:#d1e7dd; color:#0f5132; }
+
+    /* Reserved badge */
+    .badge-reserved { background:#ffc107; color:#1a1200; }
+
+    /* Action buttons */
+    .btn-sm {
+      padding:.3rem .7rem; font-size:.78rem; font-weight:600; border-radius:6px;
+      border:none; cursor:pointer; transition:opacity .15s; text-decoration:none;
+      display:inline-block;
+    }
+    .btn-approve { background:#198754; color:#fff; }
+    .btn-reject  { background:#dc3545; color:#fff; }
+    .btn-fulfill { background:#0d6efd; color:#fff; }
+    .btn-delete  { background:#6c757d; color:#fff; }
+    .btn-edit    { background:var(--accent); color:#fff; }
+    .btn-sm:hover { opacity:.82; }
+
+    /* Add/Edit form */
+    .add-form .form-grid {
+      display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:.7rem;
+    }
+    .add-form .field label { font-size:.8rem; font-weight:600; display:block; margin-bottom:.25rem; }
+    .add-form .field input, .add-form .field select {
+      width:100%; padding:.5rem .7rem; border:1.5px solid var(--border);
+      border-radius:6px; font-size:.85rem; background:var(--card-bg); color:var(--text);
+      box-sizing:border-box;
+    }
+    .add-form .field input:focus, .add-form .field select:focus {
+      outline:none; border-color:var(--accent);
+    }
+    .add-form .btn-save {
+      margin-top:.9rem; padding:.6rem 1.6rem; background:var(--accent); color:#fff;
+      border:none; border-radius:8px; font-weight:700; cursor:pointer;
+    }
+
+    /* Reserve modal inline */
+    .reserve-form { display:none; background:var(--hover-bg); padding:.7rem;
+                    border-radius:8px; margin-top:.4rem; }
+    .reserve-form.open { display:block; }
+    .reserve-form input {
+      padding:.4rem .6rem; border:1px solid var(--border); border-radius:5px;
+      font-size:.83rem; background:var(--card-bg); color:var(--text);
+      margin-bottom:.3rem; width:100%; box-sizing:border-box;
+    }
+    .reserve-form .reserve-btns { display:flex; gap:.4rem; }
+
+    .flash        { padding:.75rem 1rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
+    .flash.success { background:#d1e7dd; color:#0f5132; border:1px solid #badbcc; }
+    .flash.error   { background:#f8d7da; color:#842029; border:1px solid #f5c2c7; }
+
+    .stats-row { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+    .stat-card {
+      flex:1; min-width:120px; background:var(--card-bg); border:1px solid var(--border);
+      border-radius:10px; padding:1rem 1.2rem; text-align:center;
+    }
+    .stat-card .num { font-size:1.8rem; font-weight:800; color:var(--accent); }
+    .stat-card .lbl { font-size:.78rem; color:var(--muted); font-weight:600; }
+
+    .section-heading {
+      font-size:.78rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+      color:var(--accent); margin:0 0 .8rem;
+    }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 style="font-size:1.3rem;margin:0;">⚗️ Chemical Inventory Admin</h1>
+      <p class="sub" style="margin:0;">Manage chemicals, requests &amp; purchases</p>
+    </div>
+    <nav style="display:flex;gap:1rem;align-items:center;">
+      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">
+        Public View
+      </a>
+      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">
+        ⬇ Export CSV
+      </a>
+      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">
+        Logout
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.5rem;">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Stats -->
+  {% set pending_chem = chem_requests | selectattr('status','eq','pending') | list | length %}
+  {% set pending_purchase = purchase_requests | selectattr('status','eq','pending') | list | length %}
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="num">{{ chemicals | length }}</div>
+      <div class="lbl">Chemicals</div>
+    </div>
+    <div class="stat-card">
+      <div class="num" style="{% if pending_chem %}color:#e65c00;{% endif %}">{{ pending_chem }}</div>
+      <div class="lbl">Pending Requests</div>
+    </div>
+    <div class="stat-card">
+      <div class="num" style="{% if pending_purchase %}color:#e65c00;{% endif %}">{{ pending_purchase }}</div>
+      <div class="lbl">Pending Purchases</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">{{ chemicals | selectattr('reserved_for') | list | length }}</div>
+      <div class="lbl">Reserved</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="admin-tabs">
+    <button class="tab-btn active" onclick="showTab('tab-inventory',this)">
+      Inventory ({{ chemicals | length }})
+    </button>
+    <button class="tab-btn" onclick="showTab('tab-add',this)">Add / Edit Chemical</button>
+    <button class="tab-btn" onclick="showTab('tab-requests',this)">
+      Chemical Requests {% if pending_chem %}<span style="color:#ffc107;">({{ pending_chem }})</span>{% endif %}
+    </button>
+    <button class="tab-btn" onclick="showTab('tab-purchases',this)">
+      Purchase Requests {% if pending_purchase %}<span style="color:#ffc107;">({{ pending_purchase }})</span>{% endif %}
+    </button>
+  </div>
+
+  <!-- ── Tab: Inventory ── -->
+  <div id="tab-inventory" class="tab-pane active card" style="overflow-x:auto;">
+    <p class="section-heading">All Chemicals</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th><th>Formula</th><th>MW</th><th>CAS</th>
+          <th>Supplier</th><th>Amount</th><th>Expiry</th>
+          <th>Storage</th><th>Location</th><th>Reserved</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in chemicals %}
+        <tr>
+          <td><strong>{{ c.name }}</strong>
+            {% if c.notes and c.notes not in ('','---') %}
+            <br/><small style="color:var(--muted);font-style:italic;">{{ c.notes }}</small>
+            {% endif %}
+          </td>
+          <td class="mono">{{ c.formula }}</td>
+          <td class="mono">{{ c.mw }}</td>
+          <td class="mono">{{ c.cas_no }}</td>
+          <td>{{ c.supplier }}</td>
+          <td>{{ c.amount }}</td>
+          <td>{{ c.expiry_date }}</td>
+          <td>{{ c.storage_group }}</td>
+          <td>{{ c.location }}</td>
+          <td>
+            {% if c.reserved_for %}
+              <span class="badge badge-reserved">{{ c.reserved_label or c.reserved_for }}</span>
+              <br/><small style="color:var(--muted);">{{ c.reserved_for }}</small>
+            {% else %}—{% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            <!-- Reserve toggle -->
+            <button class="btn-sm btn-edit" onclick="toggleReserve({{ c.id }})">
+              {% if c.reserved_for %}Edit Reservation{% else %}Reserve{% endif %}
+            </button>
+            <div class="reserve-form" id="resform-{{ c.id }}">
+              <form method="post" action="/admin/chemicals/reserve/{{ c.id }}">
+                <input type="text" name="reserved_for"
+                       value="{{ c.reserved_for }}" placeholder="Email or person name"/>
+                <input type="text" name="reserved_label"
+                       value="{{ c.reserved_label }}" placeholder="Label (e.g. PhD Project X)"/>
+                <div class="reserve-btns">
+                  <button type="submit" class="btn-sm btn-approve">Save</button>
+                  <button type="button" class="btn-sm btn-delete"
+                          onclick="clearReserve({{ c.id }})">Clear</button>
+                </div>
+              </form>
+            </div>
+            <br style="margin:.2rem 0;"/>
+            <form method="post" action="/admin/chemicals/delete/{{ c.id }}"
+                  onsubmit="return confirm('Delete {{ c.name }}?');" style="display:inline;">
+              <button type="submit" class="btn-sm btn-delete" style="margin-top:.3rem;">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Tab: Add/Edit ── -->
+  <div id="tab-add" class="tab-pane card add-form">
+    <p class="section-heading">Add / Update Chemical (matched by name)</p>
+    <form method="post" action="/admin/chemicals/add">
+      <div class="form-grid">
+        <div class="field"><label>Name *</label><input type="text" name="name" required/></div>
+        <div class="field"><label>Formula</label><input type="text" name="formula"/></div>
+        <div class="field"><label>MW (g/mol)</label><input type="text" name="mw"/></div>
+        <div class="field"><label>CAS No.</label><input type="text" name="cas_no"/></div>
+        <div class="field"><label>Supplier</label><input type="text" name="supplier"/></div>
+        <div class="field"><label>Amount</label><input type="text" name="amount" placeholder="e.g. 500 g"/></div>
+        <div class="field"><label>Expiry Date</label><input type="text" name="expiry_date" placeholder="MM/YYYY"/></div>
+        <div class="field">
+          <label>Storage Group</label>
+          <select name="storage_group">
+            <option value="">—</option>
+            <option>General</option><option>Toxic</option><option>Corrosive</option>
+            <option>Oxidizer</option><option>Flammable</option><option>Health Haz</option>
+            <option>Irritant</option><option>Water-React</option>
+          </select>
+        </div>
+        <div class="field"><label>Location</label><input type="text" name="location" placeholder="Shelf / cabinet"/></div>
+        <div class="field"><label>Reserved For</label><input type="text" name="reserved_for" placeholder="Email or name"/></div>
+        <div class="field"><label>Reserved Label</label><input type="text" name="reserved_label" placeholder="Project name"/></div>
+        <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"/></div>
+      </div>
+      <button type="submit" class="btn-save">Save Chemical</button>
+    </form>
+  </div>
+
+  <!-- ── Tab: Chemical Requests ── -->
+  <div id="tab-requests" class="tab-pane card" style="overflow-x:auto;">
+    <p class="section-heading">In-Stock Chemical Requests</p>
+    {% if chem_requests %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Chemical</th><th>Formula</th><th>Requester</th>
+          <th>Email</th><th>Quantity</th><th>Purpose</th>
+          <th>Submitted</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in chem_requests %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td><strong>{{ r.chem_name }}</strong></td>
+          <td class="mono">{{ r.formula }}</td>
+          <td>{{ r.first_name }} {{ r.surname }}</td>
+          <td><a href="mailto:{{ r.requester_email }}">{{ r.requester_email }}</a></td>
+          <td>{{ r.quantity }}</td>
+          <td>{{ r.purpose or '—' }}</td>
+          <td style="white-space:nowrap;">{{ r.created_at[:10] if r.created_at else '—' }}</td>
+          <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+          <td style="white-space:nowrap;">
+            {% if r.status == 'pending' %}
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="approved"/>
+              <button type="submit" class="btn-sm btn-approve">Approve</button>
+            </form>
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="rejected"/>
+              <button type="submit" class="btn-sm btn-reject">Reject</button>
+            </form>
+            {% elif r.status == 'approved' %}
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="fulfilled"/>
+              <button type="submit" class="btn-sm btn-fulfill">Mark Fulfilled</button>
+            </form>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);text-align:center;padding:2rem;">No chemical requests yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── Tab: Purchase Requests ── -->
+  <div id="tab-purchases" class="tab-pane card" style="overflow-x:auto;">
+    <p class="section-heading">Purchase Requests</p>
+    {% if purchase_requests %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Material</th><th>Formula</th><th>CAS</th>
+          <th>Specs</th><th>Amount</th><th>Requester</th><th>Email</th>
+          <th>Comments</th><th>Submitted</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in purchase_requests %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td><strong>{{ p.material_name }}</strong></td>
+          <td class="mono">{{ p.formula or '—' }}</td>
+          <td class="mono">{{ p.cas_number or '—' }}</td>
+          <td style="max-width:180px;white-space:normal;">{{ p.specifications or '—' }}</td>
+          <td>{{ p.amount }} {{ p.unit }}</td>
+          <td>{{ p.requester_first_name }} {{ p.requester_surname }}</td>
+          <td><a href="mailto:{{ p.requester_email }}">{{ p.requester_email }}</a></td>
+          <td style="max-width:160px;white-space:normal;">{{ p.comments or '—' }}</td>
+          <td style="white-space:nowrap;">{{ p.created_at[:10] if p.created_at else '—' }}</td>
+          <td><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
+          <td style="white-space:nowrap;">
+            {% if p.status == 'pending' %}
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="approved"/>
+              <button type="submit" class="btn-sm btn-approve">Approve</button>
+            </form>
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="rejected"/>
+              <button type="submit" class="btn-sm btn-reject">Reject</button>
+            </form>
+            {% elif p.status == 'approved' %}
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
+                  style="display:inline;">
+              <input type="hidden" name="status" value="purchased"/>
+              <button type="submit" class="btn-sm btn-fulfill">Mark Purchased</button>
+            </form>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);text-align:center;padding:2rem;">No purchase requests yet.</p>
+    {% endif %}
+  </div>
+
+</main>
+
+<script>
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleReserve(id) {
+  const f = document.getElementById('resform-' + id);
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) f.querySelector('input').focus();
+}
+function clearReserve(id) {
+  const f = document.getElementById('resform-' + id);
+  f.querySelectorAll('input').forEach(i => i.value = '');
+  f.querySelector('form').submit();
+}
+// Auto-open pending tab if there are pending items
+window.addEventListener('DOMContentLoaded', () => {
+  const url = new URL(window.location);
+  const tab = url.searchParams.get('tab');
+  if (tab) {
+    const btn = document.querySelector(`[onclick*="${tab}"]`);
+    if (btn) btn.click();
+  }
+});
+</script>
+</body>
+</html>

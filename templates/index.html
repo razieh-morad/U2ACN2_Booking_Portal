@@ -1,47 +1,54 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>U2ACN2 Nanolab Booking Portal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
-</head>
-<body>
-  <header class="topbar">
-    <div class="container">
-      <h1>U2ACN2 Nanolab Booking Portal</h1>
-      <p class="sub">UNESCO-UNISA-iTL/NRF Chair · iThemba LABS</p>
-    </div>
-  </header>
+{% extends "base.html" %}
+{% block title %}U2ACN2 Nanolab — Booking Portal{% endblock %}
 
-  <main class="container">
-    <div class="card">
-      <div class="card-header-row">
-        <h2 style="margin:0;">Available Labs</h2>
-        <a class="btn-secondary" href="{{ url_for('my_bookings') }}">📋 My bookings</a>
+{% block body %}
+<div class="hero">
+  <div class="container">
+    <h1 class="hero-title">Nanolab Booking Portal</h1>
+    <p class="hero-sub">Reserve equipment, access the chemical inventory, and manage lab resources.</p>
+  </div>
+</div>
+
+<main class="container page-main">
+
+  <!-- Chemical Inventory Card -->
+  <a href="{{ chem_url }}" class="chem-nav-card">
+    <span class="chem-nav-icon">🧪</span>
+    <div class="chem-nav-info">
+      <h3>Chemical Inventory</h3>
+      <p>Search {{ "83" }} chemicals, request in-stock materials, or submit a purchase request.</p>
+    </div>
+    <div class="chem-nav-right">
+      {% if chem_pending or purchase_pending %}
+      <span class="chem-badge">
+        {{ chem_pending + purchase_pending }} pending
+      </span>
+      {% endif %}
+      <span class="chem-arrow">→</span>
+    </div>
+  </a>
+
+  <!-- Lab Grid -->
+  <h2 class="section-heading">Lab Equipment</h2>
+  <div class="labs-grid">
+    {% for lab in labs %}
+    <div class="lab-card">
+      <div class="lab-card-header">
+        <h3 class="lab-title">{{ lab.title }}</h3>
+        <p class="lab-subtitle">{{ lab.subtitle }}</p>
       </div>
-      <div class="grid">
-        {% for lab in labs %}
-          <div class="lab-card">
-            <div class="lab-card-body">
-              <div class="lab-title">{{ lab.title }}</div>
-              <div class="lab-sub">{{ lab.subtitle }}</div>
-              {% if lab.pending_count %}
-                <span class="badge badge-pending" style="margin-top:8px;">{{ lab.pending_count }} pending approval</span>
-              {% endif %}
-            </div>
-            <div class="lab-card-actions">
-              <a href="{{ lab.booking_url }}" class="btn-book">Book →</a>
-              <a href="{{ lab.availability_url }}" class="btn-avail">Timetable</a>
-            </div>
-          </div>
-        {% endfor %}
+      <div class="lab-card-body">
+        {% if lab.pending_count %}
+        <span class="pending-badge">{{ lab.pending_count }} pending</span>
+        {% endif %}
+      </div>
+      <div class="lab-card-footer">
+        <a href="{{ lab.booking_url }}" class="btn btn-primary">Book</a>
+        <a href="{{ lab.availability_url }}" class="btn btn-ghost">Availability</a>
       </div>
     </div>
-    <p class="hint" style="text-align:center;margin-top:8px;">
-      <a href="{{ admin_portal_url }}">Admin portal</a>
-      <span class="sub"> · Login required per lab</span>
-    </p>
-  </main>
-</body>
-</html>
+    {% endfor %}
+  </div>
+
+</main>
+{% endblock %}

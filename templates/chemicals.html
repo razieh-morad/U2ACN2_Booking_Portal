@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Chemical Inventory — U2ACN2 Nanolab</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    /* ── Chemical-specific styles ── */
+    .chem-hero {
+      background: linear-gradient(135deg, var(--accent) 0%, #0a3d5c 100%);
+      padding: 2.5rem 0 2rem;
+      margin-bottom: 2rem;
+    }
+    .chem-hero h1 { color:#fff; margin:0 0 .4rem; font-size:2rem; }
+    .chem-hero p  { color:rgba(255,255,255,.75); margin:0; }
+
+    .search-bar {
+      display:flex; gap:.6rem; margin-bottom:1.8rem;
+    }
+    .search-bar input {
+      flex:1; padding:.75rem 1rem; border:2px solid var(--border);
+      border-radius:8px; font-size:1rem; background:var(--card-bg); color:var(--text);
+      transition:border-color .2s;
+    }
+    .search-bar input:focus { outline:none; border-color:var(--accent); }
+    .search-bar button {
+      padding:.75rem 1.4rem; background:var(--accent); color:#fff;
+      border:none; border-radius:8px; font-weight:600; cursor:pointer;
+      transition:opacity .2s;
+    }
+    .search-bar button:hover { opacity:.85; }
+
+    .result-meta {
+      font-size:.88rem; color:var(--muted); margin-bottom:1rem;
+    }
+
+    /* ── Chemical cards grid ── */
+    .chem-grid {
+      display:grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap:1.1rem;
+    }
+
+    .chem-card {
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:1.2rem 1.4rem;
+      transition:box-shadow .2s, transform .15s;
+      position:relative;
+    }
+    .chem-card:hover {
+      box-shadow:0 6px 24px rgba(0,0,0,.13);
+      transform:translateY(-2px);
+    }
+
+    /* Reserved styling */
+    .chem-card.reserved {
+      border-color: #c8a000;
+      background: linear-gradient(135deg, var(--card-bg) 80%, rgba(255,193,7,.08));
+    }
+    .reserved-badge {
+      display:inline-flex; align-items:center; gap:.35rem;
+      background:#ffc107; color:#1a1200;
+      font-size:.75rem; font-weight:700; letter-spacing:.04em;
+      padding:.2rem .6rem; border-radius:20px;
+      margin-bottom:.6rem;
+    }
+    .reserved-badge svg { width:12px; height:12px; }
+
+    .chem-card h3 {
+      font-size:1.05rem; margin:0 0 .25rem;
+      color:var(--text); line-height:1.3;
+    }
+    .chem-formula {
+      font-family:'JetBrains Mono', monospace; font-size:.88rem;
+      color:var(--accent); margin-bottom:.7rem; font-weight:500;
+    }
+    .chem-meta {
+      display:grid; grid-template-columns:1fr 1fr; gap:.25rem .8rem;
+      font-size:.82rem; color:var(--muted); margin-bottom:.9rem;
+    }
+    .chem-meta span strong { color:var(--text); font-weight:600; }
+
+    .storage-badge {
+      display:inline-block; font-size:.72rem; font-weight:700;
+      padding:.18rem .55rem; border-radius:20px; margin-bottom:.8rem;
+      letter-spacing:.04em; text-transform:uppercase;
+    }
+    .sg-general      { background:#e8f5e9; color:#2e7d32; }
+    .sg-toxic        { background:#fce4ec; color:#c62828; }
+    .sg-corrosive    { background:#fff3e0; color:#bf360c; }
+    .sg-oxidizer     { background:#e3f2fd; color:#1565c0; }
+    .sg-flammable    { background:#fff8e1; color:#f57f17; }
+    .sg-health       { background:#fce4ec; color:#880e4f; }
+    .sg-irritant     { background:#fafafa; color:#616161; border:1px solid #e0e0e0; }
+    .sg-water        { background:#e1f5fe; color:#01579b; }
+    .sg-other        { background:#f3e5f5; color:#4a148c; }
+
+    /* Request form inside card */
+    .request-toggle {
+      background:none; border:1px solid var(--accent); color:var(--accent);
+      padding:.45rem .9rem; border-radius:8px; font-size:.85rem;
+      cursor:pointer; font-weight:600; transition:all .2s; width:100%;
+    }
+    .request-toggle:hover { background:var(--accent); color:#fff; }
+
+    .request-form-panel {
+      display:none; margin-top:1rem; padding-top:1rem;
+      border-top:1px solid var(--border);
+    }
+    .request-form-panel.open { display:block; }
+
+    .request-form-panel .form-row {
+      display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.5rem;
+    }
+    .request-form-panel input,
+    .request-form-panel textarea {
+      width:100%; padding:.55rem .75rem; border:1px solid var(--border);
+      border-radius:6px; font-size:.85rem; background:var(--card-bg); color:var(--text);
+      box-sizing:border-box;
+    }
+    .request-form-panel textarea { resize:vertical; min-height:56px; }
+    .request-form-panel .btn-submit {
+      width:100%; margin-top:.5rem; padding:.6rem;
+      background:var(--accent); color:#fff; border:none;
+      border-radius:8px; font-weight:700; cursor:pointer; font-size:.9rem;
+    }
+    .request-form-panel .btn-submit:hover { opacity:.88; }
+
+    /* Purchase CTA */
+    .purchase-cta {
+      background:var(--card-bg); border:2px dashed var(--border);
+      border-radius:12px; padding:2rem; text-align:center; margin-top:1.5rem;
+    }
+    .purchase-cta h3 { margin:0 0 .5rem; }
+    .purchase-cta p  { color:var(--muted); margin:0 0 1rem; }
+    .purchase-cta .btn-purchase {
+      display:inline-block; padding:.7rem 1.6rem;
+      background:var(--accent); color:#fff; text-decoration:none;
+      border-radius:8px; font-weight:700; transition:opacity .2s;
+    }
+    .purchase-cta .btn-purchase:hover { opacity:.85; }
+
+    .empty-state {
+      text-align:center; padding:3rem; color:var(--muted);
+    }
+    .empty-state svg { width:48px; height:48px; margin-bottom:1rem; opacity:.4; }
+
+    /* flash messages */
+    .flash { padding:.8rem 1.2rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
+    .flash.success { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+    .flash.error   { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 style="font-size:1.3rem;margin:0;">🧪 Chemical Inventory</h1>
+      <p class="sub" style="margin:0;">U2ACN2 Nanolab — search, request, or purchase chemicals</p>
+    </div>
+    <nav style="display:flex;gap:1rem;align-items:center;">
+      <a href="/" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">← Home</a>
+      <a href="/admin/chemicals" style="color:rgba(255,255,255,.65);text-decoration:none;font-size:.85rem;">Admin</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding-top:1.5rem;">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Search bar -->
+  <form method="get" action="/chemicals" class="search-bar">
+    <input type="text" name="q" value="{{ query }}"
+           placeholder="Search by name or formula (e.g. NaCl, Ethanol, TiO2)…"
+           autofocus/>
+    <button type="submit">Search</button>
+    {% if query %}
+      <a href="/chemicals" style="padding:.75rem 1rem;color:var(--muted);text-decoration:none;
+         border:1px solid var(--border);border-radius:8px;white-space:nowrap;font-size:.9rem;">
+        Clear ✕
+      </a>
+    {% endif %}
+  </form>
+
+  {% if query %}
+    <p class="result-meta">
+      {% if chemicals %}
+        {{ chemicals|length }} result{{ 's' if chemicals|length != 1 }} for "<strong>{{ query }}</strong>"
+      {% else %}
+        No chemicals found for "<strong>{{ query }}</strong>"
+      {% endif %}
+    </p>
+  {% else %}
+    <p class="result-meta">Showing all {{ chemicals|length }} chemicals in inventory.</p>
+  {% endif %}
+
+  {% if chemicals %}
+  <div class="chem-grid">
+    {% for c in chemicals %}
+    {% set sg = c.storage_group | lower %}
+    {% if 'toxic' in sg %}{% set sg_class = 'sg-toxic' %}
+    {% elif 'corrosive' in sg %}{% set sg_class = 'sg-corrosive' %}
+    {% elif 'oxidizer' in sg %}{% set sg_class = 'sg-oxidizer' %}
+    {% elif 'flammable' in sg %}{% set sg_class = 'sg-flammable' %}
+    {% elif 'health' in sg %}{% set sg_class = 'sg-health' %}
+    {% elif 'irritant' in sg %}{% set sg_class = 'sg-irritant' %}
+    {% elif 'water' in sg %}{% set sg_class = 'sg-water' %}
+    {% elif 'general' in sg %}{% set sg_class = 'sg-general' %}
+    {% else %}{% set sg_class = 'sg-other' %}
+    {% endif %}
+
+    <div class="chem-card {% if c.reserved_for %}reserved{% endif %}">
+
+      {% if c.reserved_for %}
+      <div class="reserved-badge">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2.5a1 1 0 110 2 1 1 0 010-2zm-.5 3.5h1v4h-1V7z"/></svg>
+        Reserved{% if c.reserved_label %} — {{ c.reserved_label }}{% endif %}
+      </div>
+      {% endif %}
+
+      {% if c.storage_group %}
+      <span class="storage-badge {{ sg_class }}">{{ c.storage_group }}</span>
+      {% endif %}
+
+      <h3>{{ c.name }}</h3>
+      {% if c.formula and c.formula != '---' %}
+      <div class="chem-formula">{{ c.formula }}</div>
+      {% endif %}
+
+      <div class="chem-meta">
+        {% if c.mw and c.mw not in ('0','','---') %}
+        <span><strong>MW:</strong> {{ c.mw }} g/mol</span>
+        {% endif %}
+        {% if c.cas_no and c.cas_no not in ('','---') %}
+        <span><strong>CAS:</strong> {{ c.cas_no }}</span>
+        {% endif %}
+        {% if c.supplier and c.supplier not in ('','---') %}
+        <span><strong>Supplier:</strong> {{ c.supplier }}</span>
+        {% endif %}
+        {% if c.amount and c.amount not in ('','---','--','-') %}
+        <span><strong>Amount:</strong> {{ c.amount }}</span>
+        {% endif %}
+        {% if c.expiry_date and c.expiry_date not in ('','---','----') %}
+        <span><strong>Expiry:</strong> {{ c.expiry_date }}</span>
+        {% endif %}
+        {% if c.location and c.location not in ('','---') %}
+        <span><strong>Location:</strong> {{ c.location }}</span>
+        {% endif %}
+      </div>
+
+      {% if c.notes and c.notes not in ('','---') %}
+      <p style="font-size:.82rem;color:var(--muted);margin:0 0 .8rem;font-style:italic;">{{ c.notes }}</p>
+      {% endif %}
+
+      <!-- Request toggle -->
+      <button class="request-toggle" onclick="toggleRequest({{ c.id }})">
+        Request this chemical
+      </button>
+
+      <div class="request-form-panel" id="req-{{ c.id }}">
+        <form method="post" action="/chemicals/request">
+          <input type="hidden" name="chem_id" value="{{ c.id }}"/>
+          <div class="form-row">
+            <input type="text" name="first_name" placeholder="First name *" required/>
+            <input type="text" name="surname" placeholder="Surname *" required/>
+          </div>
+          <input type="email" name="email" placeholder="Email address *"
+                 style="width:100%;margin-bottom:.5rem;" required/>
+          <input type="text" name="quantity"
+                 placeholder="Quantity needed (e.g. 5 g, 10 mL) *"
+                 style="width:100%;margin-bottom:.5rem;" required/>
+          <textarea name="purpose" placeholder="Purpose / experiment (optional)"
+                    style="width:100%;"></textarea>
+          <button type="submit" class="btn-submit">Submit Request</button>
+        </form>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15M14.25 3.104c.251.023.501.05.75.082M19.8 15l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.607L5 14.5m14.8.5l.38 1.5M5 14.5l-.38 1.5m0 0A2.25 2.25 0 002.25 18v.75h19.5V18a2.25 2.25 0 00-2.37-2.248"/>
+    </svg>
+    <h3>No chemicals found</h3>
+    <p>Try a different search term, or request a new chemical below.</p>
+  </div>
+  {% endif %}
+
+  <!-- Purchase CTA -->
+  <div class="purchase-cta">
+    <h3>🔬 Chemical not in inventory?</h3>
+    <p>Submit a purchase request and the lab admin will arrange procurement.</p>
+    <a href="/chemicals/purchase{% if query %}?material_name={{ query | urlencode }}{% endif %}"
+       class="btn-purchase">Request to Purchase</a>
+  </div>
+
+</main>
+
+<script>
+function toggleRequest(id) {
+  const panel = document.getElementById('req-' + id);
+  const isOpen = panel.classList.contains('open');
+  // Close all open panels
+  document.querySelectorAll('.request-form-panel.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.request-toggle').forEach(b => b.textContent = 'Request this chemical');
+  if (!isOpen) {
+    panel.classList.add('open');
+    panel.previousElementSibling.textContent = 'Cancel ✕';
+    panel.querySelector('input[name=first_name]').focus();
+  }
+}
+</script>
+</body>
+</html>

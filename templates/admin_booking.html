@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Booking #{{ booking.id }} — Admin{% endblock %}
+
+{% block body %}
+<main class="container page-main">
+
+  <div class="page-header">
+    <div>
+      <a href="/admin/{{ lab_slug }}" class="back-link">← {{ lab_title }} Bookings</a>
+      <h1>Booking #{{ booking.id }}</h1>
+      <p class="page-sub">
+        <span class="status-badge status-{{ booking.status }}">{{ booking.status }}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="booking-detail-grid">
+
+    <!-- Booking info -->
+    <div class="card">
+      <h2 class="card-heading">Booking Details</h2>
+      <dl class="detail-list">
+        <dt>Lab</dt>         <dd>{{ lab_title }}</dd>
+        <dt>Date</dt>        <dd>{{ booking.booking_date }}</dd>
+        <dt>Time</dt>        <dd>{{ booking.start_time[:5] }} – {{ booking.end_time[:5] }}</dd>
+        <dt>Name</dt>        <dd>{{ booking.user_name }}</dd>
+        <dt>Email</dt>       <dd><a href="mailto:{{ booking.user_email }}">{{ booking.user_email }}</a></dd>
+        {% if booking.notes %}
+        <dt>Notes</dt>       <dd>{{ booking.notes }}</dd>
+        {% endif %}
+        {% if booking.nanomaterial_type %}
+        <dt>Material</dt>    <dd>{{ booking.nanomaterial_type }}</dd>
+        {% endif %}
+        {% if booking.anneal_temp_c %}
+        <dt>Anneal Temp</dt> <dd>{{ booking.anneal_temp_c }} °C</dd>
+        {% endif %}
+        {% if booking.anneal_time_h %}
+        <dt>Anneal Time</dt> <dd>{{ booking.anneal_time_h }} h</dd>
+        {% endif %}
+        {% if booking.gas_type %}
+        <dt>Gas</dt>         <dd>{{ booking.gas_type }}</dd>
+        {% endif %}
+        {% if booking.vacuum and booking.vacuum == 'Yes' %}
+        <dt>Vacuum</dt>      <dd>Yes</dd>
+        {% endif %}
+        {% if booking.sample_name %}
+        <dt>Sample</dt>      <dd>{{ booking.sample_name }}</dd>
+        {% endif %}
+        {% if booking.elements_of_interest %}
+        <dt>Elements</dt>    <dd>{{ booking.elements_of_interest }}</dd>
+        {% endif %}
+        {% if booking.analysis_type %}
+        <dt>Analysis</dt>    <dd>{{ booking.analysis_type }}</dd>
+        {% endif %}
+        {% if booking.rejection_reason %}
+        <dt>Rejection Reason</dt><dd class="text-danger">{{ booking.rejection_reason }}</dd>
+        {% endif %}
+        {% if booking.approval_note %}
+        <dt>Approval Note</dt>   <dd>{{ booking.approval_note }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+
+    <!-- Actions -->
+    <div class="admin-actions">
+
+      {% if booking.status == 'pending' %}
+      <div class="card action-card">
+        <h2 class="card-heading">Approve</h2>
+        <form method="post">
+          <input type="hidden" name="action" value="approve"/>
+          <div class="field">
+            <label>Note to user (optional)</label>
+            <textarea name="approval_note" rows="2" placeholder="e.g. Sample prep reminder…"></textarea>
+          </div>
+          <button type="submit" class="btn btn-success btn-full">✓ Approve Booking</button>
+        </form>
+      </div>
+
+      <div class="card action-card">
+        <h2 class="card-heading">Reject</h2>
+        <form method="post">
+          <input type="hidden" name="action" value="reject"/>
+          <div class="field">
+            <label>Reason (optional)</label>
+            <textarea name="rejection_reason" rows="2" placeholder="e.g. Equipment maintenance scheduled…"></textarea>
+          </div>
+          <button type="submit" class="btn btn-danger btn-full">✗ Reject Booking</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <div class="card action-card">
+        <h2 class="card-heading">Delete</h2>
+        <form method="post" onsubmit="return confirm('Permanently delete booking #{{ booking.id }}?');">
+          <input type="hidden" name="action" value="delete"/>
+          <label class="checkbox-label" style="margin-bottom:.8rem;">
+            <input type="checkbox" name="notify_user" value="1"/> Notify user by email
+          </label>
+          <button type="submit" class="btn btn-ghost btn-full">Delete Booking</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+{% endblock %}
