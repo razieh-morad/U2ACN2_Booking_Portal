@@ -101,6 +101,8 @@ SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Portal")
 SMTP_USER      = os.environ.get("SMTP_USER",      "").strip()
 SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD",  "").strip()
 
+BOOKING_ADMIN_EMAIL = os.environ.get("BOOKING_ADMIN_EMAIL", SMTP_USER).strip()
+
 def smtp_ready() -> bool:
     return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
@@ -739,14 +741,19 @@ def _seed_chemicals():
 
 def _send_email(to: str, subject: str, body: str) -> None:
     if not smtp_ready():
-        raise RuntimeError("SMTP not configured.")
+        raise RuntimeError("SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASSWORD.")
     msg = EmailMessage()
     msg["From"]     = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
     msg["To"]       = to
     msg["Subject"]  = subject
     msg["Reply-To"] = SMTP_USER
     msg.set_content(body)
-    if SMTP_USE_TLS:
+    # Port 465 = implicit SSL; Port 587 = STARTTLS; anything else = plain
+    if SMTP_PORT == 465:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+            s.login(SMTP_USER, SMTP_PASSWORD)
+            s.send_message(msg)
+    elif SMTP_USE_TLS:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
             s.ehlo(); s.starttls(); s.ehlo()
             s.login(SMTP_USER, SMTP_PASSWORD)
@@ -758,9 +765,13 @@ def _send_email(to: str, subject: str, body: str) -> None:
 
 def _send_async(to: str, subject: str, body: str) -> None:
     def _run():
-        try: _send_email(to, subject, body)
-        except Exception: pass
-    threading.Thread(target=_run, daemon=True).start()
+        try:
+            _send_email(to, subject, body)
+        except Exception as e:
+            import sys
+            print(f"[EMAIL ERROR] to={to} subject={subject!r} error={e}", file=sys.stderr)
+    t = threading.Thread(target=_run, daemon=False)
+    t.start()
 
 def _send_async_multi(recipients: List[str], subject: str, body: str) -> None:
     for r in recipients:
@@ -1043,7 +1054,7 @@ def notify_admin_new_booking(lab_slug: str, b: Dict, approve_url: str, reject_ur
         f" Name  : {b['user_name']}\n Email : {b['user_email']}\n Slot  : {_slot_str(b)}\n\n"
         f"APPROVE: {approve_url}\nREJECT:  {reject_url}\n\nRegards,\n{SMTP_FROM_NAME}\n"
     )
-    _send_async(SMTP_USER, f"[Action required] New booking — {lab_title}", body)
+    _send_async(BOOKING_ADMIN_EMAIL, f"[Action required] New booking — {lab_title}", body)
 
 def notify_user_approved(lab_slug: str, b: Dict, note: str = "") -> None:
     if not smtp_ready(): return
@@ -1393,6 +1404,35 @@ def debug_init():
     except Exception as e:
         results["purchase_requests_count"] = f"ERROR: {e}"
     return jsonify(results)
+
+
+@app.get("/debug/email")
+def debug_email():
+    """Send a test email to BOOKING_ADMIN_EMAIL. Remove after confirming email works."""
+    import traceback
+    result = {}
+    result["smtp_ready"] = smtp_ready()
+    result["SMTP_HOST"]  = SMTP_HOST or "(not set)"
+    result["SMTP_PORT"]  = SMTP_PORT
+    result["SMTP_USER"]  = SMTP_USER or "(not set)"
+    result["SMTP_USE_TLS"] = SMTP_USE_TLS
+    result["BOOKING_ADMIN_EMAIL"] = BOOKING_ADMIN_EMAIL or "(not set)"
+    result["CHEM_ADMIN_EMAIL"]    = CHEM_ADMIN_EMAIL or "(not set)"
+    result["PURCHASE_NOTIFY_EMAILS"] = PURCHASE_NOTIFY_EMAILS
+    if smtp_ready():
+        try:
+            _send_email(
+                BOOKING_ADMIN_EMAIL or SMTP_USER,
+                "U2ACN2 Portal — email test",
+                f"This is a test email from the U2ACN2 Nanolab Portal.\n\n"
+                f"SMTP_HOST={SMTP_HOST}\nSMTP_PORT={SMTP_PORT}\nSMTP_USER={SMTP_USER}\n"
+            )
+            result["send_result"] = "SUCCESS — check your inbox"
+        except Exception as e:
+            result["send_result"] = f"FAILED: {traceback.format_exc()}"
+    else:
+        result["send_result"] = "SKIPPED — SMTP not configured"
+    return jsonify(result)
 
 @app.get("/health")
 def health():
