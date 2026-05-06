@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Admin Portal — U2ACN2 Nanolab{% endblock %}
+
+{% block body %}
+<main class="container page-main">
+
+  <div class="page-header">
+    <div>
+      <a href="/" class="back-link">← Back to homepage</a>
+      <h1>Admin Portal</h1>
+      <p class="page-sub">Select a lab — login required per lab.</p>
+    </div>
+    <a href="/admin/chemicals" class="btn btn-ghost">⚗️ Chemical Admin</a>
+  </div>
+
+  <div class="card">
+    <ul class="admin-list">
+      {% for lab in labs %}
+      <li>
+        <div class="admin-list-title">
+          <strong>{{ lab.title }}</strong>
+          {% if lab.pending_count %}
+          <span class="pending-badge">{{ lab.pending_count }} pending</span>
+          {% endif %}
+        </div>
+        <div class="admin-list-links">
+          <a href="{{ lab.admin_url }}">Open admin</a>
+          <span class="sep">·</span>
+          <a href="{{ lab.availability_url }}">Availability</a>
+          <span class="sep">·</span>
+          <a href="{{ lab.booking_url }}">Booking form</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+</main>
+
+<style>
+  .admin-list { list-style:none; padding:0; margin:0; }
+  .admin-list li {
+    padding: .9rem 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  .admin-list li:last-child { border-bottom: none; }
+  .admin-list-title {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: .95rem;
+  }
+  .admin-list-links {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+  }
+  .admin-list-links a { color: var(--accent); }
+  .admin-list-links a:hover { text-decoration: underline; }
+  .sep { color: var(--muted); }
+</style>
+{% endblock %}

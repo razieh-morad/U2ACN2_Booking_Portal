@@ -258,6 +258,7 @@ def _migrate_postgres(cur):
             requester_email TEXT NOT NULL,
             comments TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'pending',
+            admin_note TEXT DEFAULT '',
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
     """)
@@ -317,9 +318,14 @@ def _migrate_sqlite(conn: sqlite3.Connection):
             requester_email TEXT NOT NULL,
             comments TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'pending',
+            admin_note TEXT DEFAULT '',
             created_at TEXT NOT NULL
         );
     """)
+    # Migrate existing purchase_requests table
+    pr_cols = {r[1] for r in conn.execute("PRAGMA table_info(purchase_requests);").fetchall()}
+    if 'admin_note' not in pr_cols:
+        conn.execute("ALTER TABLE purchase_requests ADD COLUMN admin_note TEXT DEFAULT '';")
 
 def init_db():
     global _db_initialized
@@ -611,127 +617,97 @@ def _list_purchase_requests(status: Optional[str] = None) -> List[Dict]:
         conn.close()
         return [dict(r) for r in rows]
 
-def _set_purchase_request_status(req_id: int, status: str):
+def _set_purchase_request_status(req_id: int, status: str, admin_note: str = "") -> None:
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
             with conn.cursor() as cur:
-                cur.execute("UPDATE purchase_requests SET status=%s WHERE id=%s", (status, req_id))
+                cur.execute("UPDATE purchase_requests SET status=%s, admin_note=%s WHERE id=%s",
+                            (status, admin_note, req_id))
             conn.commit()
         finally:
             _pg_putconn(conn)
     else:
         conn = sqlite3.connect(SQLITE_PATH)
-        conn.execute("UPDATE purchase_requests SET status=? WHERE id=?", (status, req_id))
+        conn.execute("UPDATE purchase_requests SET status=?, admin_note=? WHERE id=?",
+                     (admin_note, status, req_id))
+        conn.commit()
+        conn.close()
+
+def _update_purchase_admin_note(req_id: int, admin_note: str) -> None:
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE purchase_requests SET admin_note=%s WHERE id=%s",
+                            (admin_note, req_id))
+            conn.commit()
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.execute("UPDATE purchase_requests SET admin_note=? WHERE id=?",
+                     (admin_note, req_id))
         conn.commit()
         conn.close()
 
 # -------------------------------------------------- Seed chemicals from CSV --
 
-CHEMICALS_SEED = [
-    {"name": "Aluminium Oxide", "formula": "AlO", "mw": "101.96", "cas_no": "1344-28-1", "supplier": "Goodfellow", "amount": "1 kg", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Aluminium Nitrate", "formula": "Al(NO3)3·9H2O", "mw": "375.13", "cas_no": "7784-27-2", "supplier": "Sigma/Merck", "amount": "500 g", "expiry_date": "28-02-2010", "storage_group": "Oxidizer"},
-    {"name": "Aluminium Chloride hexahydrate", "formula": "AlCl3·6H2O", "mw": "241.45", "cas_no": "7784-13-6", "supplier": "Merck", "amount": "500 g", "expiry_date": "28-02-2010", "storage_group": "Corrosive"},
-    {"name": "Ammonium Fluoride", "formula": "NH4F", "mw": "37.04", "cas_no": "12125-01-08", "supplier": "---", "amount": "500 g", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Ammonium Chloride", "formula": "NH4Cl", "mw": "53.49", "cas_no": "12125-02-09", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": ""},
-    {"name": "Ammonium Hydrogen Carbonate", "formula": "NH4HCO3", "mw": "79.06", "cas_no": "1066-33-7", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Barium Nitrite", "formula": "Ba(NO2)2", "mw": "229.34", "cas_no": "13465-94-6", "supplier": "Mirena", "amount": "---", "expiry_date": "01-06-2026", "storage_group": "Oxidizer/Toxic"},
-    {"name": "Borane Ammonia Complex", "formula": "BH3NH3", "mw": "30.87", "cas_no": "13774-81-7", "supplier": "Arich Chem", "amount": "---", "expiry_date": "---", "storage_group": "Flammable"},
-    {"name": "Boric Acid", "formula": "H3BO3", "mw": "61.83", "cas_no": "10043-35-3", "supplier": "Sigma Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Brilliant Blue R", "formula": "C45H44N3NaO7S2", "mw": "825.97", "cas_no": "6104-59-2", "supplier": "Sigma", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Cadmium Chloride hydrate", "formula": "CdCl2·xH2O", "mw": "183.32", "cas_no": "10108-64-2", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Cadmium Fluoride", "formula": "CdF2", "mw": "150.4", "cas_no": "7790-79-6", "supplier": "Fluka", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Cadmium Nitrate Tetrahydrate", "formula": "Cd(NO3)2·4H2O", "mw": "308.47", "cas_no": "10022-68-1", "supplier": "Fluka", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Calcium Carbonate", "formula": "CaCO3", "mw": "100.09", "cas_no": "471-34-1", "supplier": "SRL", "amount": "", "expiry_date": "01-06-2028", "storage_group": "General"},
-    {"name": "Calcium Iodide Tetrahydrate", "formula": "CaI2·4H2O", "mw": "365.95", "cas_no": "10102-68-8", "supplier": "SRL", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Carboxymethyl Cellulose Sodium", "formula": "Polymer", "mw": "0", "cas_no": "9004-32-4", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Cobalt(II) Nitrate", "formula": "Co(NO3)2·6H2O", "mw": "291.03", "cas_no": "10026-22-9", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Cobalt(II) Sulfate Heptahydrate", "formula": "CoSO4·7H2O", "mw": "281.1", "cas_no": "10026-24-1", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Congo Red", "formula": "C32H22N6Na2O6S2", "mw": "696.66", "cas_no": "573-58-0", "supplier": "SRL", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Copper(II) Nitrate", "formula": "Cu(NO3)2·3H2O", "mw": "241.6", "cas_no": "10031-43-3", "supplier": "Sigma/SRL", "amount": "", "expiry_date": "04/2021", "storage_group": "Oxidizer"},
-    {"name": "Copper(II) Oxide", "formula": "CuO", "mw": "79.55", "cas_no": "1317-38-0", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Copper Phthalocyanine", "formula": "Pigment Blue 15", "mw": "576.08", "cas_no": "147-14-8", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Copper(II) Sulfate", "formula": "CuSO4", "mw": "159.6", "cas_no": "231-967-6", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Cupferron", "formula": "C6H9N3O2", "mw": "155.16", "cas_no": "135-20-6", "supplier": "Fluka", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Chromium(III) Chloride Hexahydrate", "formula": "CrCl3·6H2O", "mw": "266.45", "cas_no": "10060-12-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Tri-Calcium Phosphate", "formula": "Ca3(PO4)2", "mw": "", "cas_no": "7758-87-4", "supplier": "Saarchem", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Chromium(III) Potassium Sulfate Dodecahydrate", "formula": "CrK(SO4)2·12H2O", "mw": "499.4", "cas_no": "7788-99-0", "supplier": "Sigma Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Copper(II) Perchlorate Hexahydrate", "formula": "Cu(ClO4)2·6H2O", "mw": "370.54", "cas_no": "10294-46-9", "supplier": "Sigma Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Dopamine Hydrochloride", "formula": "C8H11NO2·HCl", "mw": "189.64", "cas_no": "62-31-7", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Dodecarbonyltriron", "formula": "Fe3(CO)12", "mw": "503.66", "cas_no": "17685-52-8", "supplier": "Alfa Aesar", "amount": "10 g", "expiry_date": "---", "storage_group": "Flammable"},
-    {"name": "Ferric Chloride", "formula": "FeCl3·6H2O", "mw": "270.3", "cas_no": "10025-77-1", "supplier": "M&B Laboratory", "amount": "", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Ferrocene", "formula": "Fe(C5H5)2", "mw": "186.03", "cas_no": "102-54-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Hexamethylenetetramine", "formula": "C6H12N4", "mw": "140.19", "cas_no": "100-97-0", "supplier": "Merck", "amount": "200 g", "expiry_date": "---", "storage_group": "Flammable"},
-    {"name": "Iodine", "formula": "I2", "mw": "253.81", "cas_no": "7553-56-2", "supplier": "Sichem", "amount": "100 g", "expiry_date": "---", "storage_group": "Corrosive/Toxic"},
-    {"name": "Lysine", "formula": "C6H14N2O2", "mw": "146.19", "cas_no": "56-87-1", "supplier": "Sigma", "amount": "150 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Magnesium Carbonate", "formula": "Mg(CO3)", "mw": "84.31", "cas_no": "546-93-0", "supplier": "Sirchem", "amount": "500 g", "expiry_date": "09/2023", "storage_group": "General"},
-    {"name": "Magnesium Oxide", "formula": "MgO", "mw": "40.3", "cas_no": "1309-48-4", "supplier": "Sigma", "amount": "--", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Magnesium Sulphate", "formula": "MgSO4", "mw": "120.37", "cas_no": "7487-88-9", "supplier": "Merck", "amount": "500 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Mercury Acetate", "formula": "Hg(CH3COO)2", "mw": "318.68", "cas_no": "1600-27-7", "supplier": "Sigma Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Mesitylenesulfonyl Chloride", "formula": "C9H11ClO2S", "mw": "218.7", "cas_no": "773-64-8", "supplier": "Fluka", "amount": "--", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Methyl Orange", "formula": "C14H14N3NaO3S", "mw": "327.34", "cas_no": "547-58-0", "supplier": "Sirchem", "amount": "200 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Methylene Blue Hydrate", "formula": "C16H18ClN3S", "mw": "319.85", "cas_no": "122965-43-9", "supplier": "Sigma", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Nickel(II) Oxide", "formula": "NiO", "mw": "74.69", "cas_no": "1313-99-1", "supplier": "Sigma", "amount": "100 g", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Nickel(II) Sulphate", "formula": "NiSO4·7H2O", "mw": "280.86", "cas_no": "10101-98-1", "supplier": "---", "amount": "---", "expiry_date": "06/2006", "storage_group": "Health Haz"},
-    {"name": "Octadecane", "formula": "CH3(CH2)16CH3", "mw": "254.49", "cas_no": "593-45-3", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Oxalic Acid", "formula": "C2H2O4·2H2O", "mw": "126.07", "cas_no": "6153-56-6", "supplier": "Hopkins & Williams", "amount": "500 g", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "DL-Phenylalanine", "formula": "C9H11NO2", "mw": "165.19", "cas_no": "150-30-1", "supplier": "---", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Ruthenium Powder", "formula": "Ru", "mw": "101.07", "cas_no": "7440-18-8", "supplier": "Goodfellow", "amount": "10 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Self-Indicating Silica Gel", "formula": "SiO2", "mw": "60.08", "cas_no": "112926-00-8", "supplier": "Ager Scientific LDT", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Silver Nitrate", "formula": "AgNO3", "mw": "169.87", "cas_no": "7761-88-8", "supplier": "Merck", "amount": "---", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Sodium Acetate Trihydrate", "formula": "CH3COONa·3H2O", "mw": "136.08", "cas_no": "6131-90-4", "supplier": "Alfa Aesar", "amount": "--", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Cacodylate", "formula": "C2H6AsNaO2·3H2O", "mw": "214.03", "cas_no": "---", "supplier": "Electron Microscopy", "amount": "---", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Sodium Chloride", "formula": "NaCl", "mw": "58.44", "cas_no": "7647-14-5", "supplier": "Associated Chemical Enterprise", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Citrate Monobasic", "formula": "NaH2C6H5O7", "mw": "214.11", "cas_no": "18996-35-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Dodecyl Sulfate", "formula": "C12H25NaO4S", "mw": "288.38", "cas_no": "151-21-3", "supplier": "Aldrich", "amount": "---", "expiry_date": "---", "storage_group": "Irritant"},
-    {"name": "Sodium Hydroxide", "formula": "NaOH", "mw": "40", "cas_no": "1310-73-2", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Sodium Hypophosphite", "formula": "NaH2PO2·H2O", "mw": "105.99", "cas_no": "---", "supplier": "Alfa Aesar", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Iodide", "formula": "NaI", "mw": "149.89", "cas_no": "7681-82-5", "supplier": "Sirchem", "amount": "---", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Lauryl Sulphate", "formula": "C12H25NaO4S", "mw": "288.38", "cas_no": "151-21-3", "supplier": "Merck", "amount": "", "expiry_date": "---", "storage_group": "Irritant"},
-    {"name": "Sodium Molybdate", "formula": "Na2MoO4·2H2O", "mw": "241.95", "cas_no": "10102-40-6", "supplier": "Riedel-de-Haen", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Nitrate", "formula": "NaNO3", "mw": "84.99", "cas_no": "7631-99-4", "supplier": "Sigma", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Sodium Nano Powder", "formula": "Na", "mw": "22.99", "cas_no": "7440-23-5", "supplier": "Nano Shel UK", "amount": "", "expiry_date": "---", "storage_group": "Water-React"},
-    {"name": "Sodium Persulfate", "formula": "Na2S2O8", "mw": "238.1", "cas_no": "7775-27-1", "supplier": "Sigma/Aldrich", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Sodium Sulphate", "formula": "Na2SO4", "mw": "142.04", "cas_no": "7757-82-6", "supplier": "Siso Research", "amount": "", "expiry_date": "03/2028", "storage_group": "General"},
-    {"name": "Sodium Tetraborate", "formula": "Na2B4O7·10H2O", "mw": "381.37", "cas_no": "1303-96-4", "supplier": "British Drug Houses", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Sodium Tripolyphosphate", "formula": "Na5P3O10", "mw": "367.86", "cas_no": "7758-29-4", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Stannous Chloride", "formula": "SnCl2·2H2O", "mw": "225.65", "cas_no": "10025-69-1", "supplier": "SRLCHEM", "amount": "", "expiry_date": "05/2028", "storage_group": "Corrosive"},
-    {"name": "Strontium Nitrate", "formula": "Sr(NO3)2", "mw": "211.63", "cas_no": "10042-76-9", "supplier": "Saarchem", "amount": "", "expiry_date": "---", "storage_group": "Oxidizer"},
-    {"name": "Tetrabutylammonium Perchlorate", "formula": "C16H36ClNO4", "mw": "341.91", "cas_no": "1923-70-2", "supplier": "Sigma Aldrich", "amount": "100 g", "expiry_date": "", "storage_group": "Oxidizer"},
-    {"name": "Thallium(I) Sulfate", "formula": "Tl2SO4", "mw": "504.83", "cas_no": "7446-18-6", "supplier": "Analar", "amount": "25 g", "expiry_date": "---", "storage_group": "Toxic"},
-    {"name": "Thiourea", "formula": "CH4N2S", "mw": "76.12", "cas_no": "62-56-6", "supplier": "Sigma", "amount": "250 g", "expiry_date": "---", "storage_group": "Health Haz"},
-    {"name": "Tin(IV) Chloride", "formula": "SnCl4", "mw": "350.6", "cas_no": "10026-06-09", "supplier": "Sigma", "amount": "5 g", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Tin(IV) Oxide", "formula": "SnO2", "mw": "150.71", "cas_no": "18282-10-5", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Titanium(IV) Oxide", "formula": "TiO2", "mw": "79.87", "cas_no": "1317-70-0", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Titanium Nitride", "formula": "TiN", "mw": "61.87", "cas_no": "25583-20-4", "supplier": "Aldrich", "amount": "25 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Tris(hydroxymethyl)aminomethane", "formula": "C4H11NO3", "mw": "121.14", "cas_no": "77-86-1", "supplier": "Alfa Aesar", "amount": "100 g", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Urea", "formula": "NH2CONH2", "mw": "60.06", "cas_no": "57-13-6", "supplier": "Alfa Aesar", "amount": "", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Zinc Fluoride", "formula": "ZnF2", "mw": "103.37", "cas_no": "7783-49-5", "supplier": "Aldrich", "amount": "100 g", "expiry_date": "---", "storage_group": "Corrosive"},
-    {"name": "Zinc Iodide", "formula": "ZnI2", "mw": "319.22", "cas_no": "10139-47-6", "supplier": "Aldrich", "amount": "--", "expiry_date": "---", "storage_group": "General"},
-    {"name": "Zinc Nitride", "formula": "Zn3N2", "mw": "224.15", "cas_no": "1313-49-1", "supplier": "Alfa Aesar", "amount": "10 g", "expiry_date": "---", "storage_group": "Water-React"},
-    {"name": "Zinc Phthalocyanine", "formula": "C32H16N8Zn", "mw": "577.91", "cas_no": "14320-04-08", "supplier": "Aldrich", "amount": "", "expiry_date": "---", "storage_group": "General"},
-]
+CHEMICALS_SEED = []  # Chemicals are managed via CSV upload in the admin panel
 
-def _seed_chemicals():
-    if USE_POSTGRES:
-        conn = _pg_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM chemicals")
-                if cur.fetchone()[0] > 0:
-                    return
-            for c in CHEMICALS_SEED:
-                _upsert_chemical(c)
-        finally:
-            _pg_putconn(conn)
-    else:
-        conn = sqlite3.connect(SQLITE_PATH)
-        count = conn.execute("SELECT COUNT(*) FROM chemicals").fetchone()[0]
-        conn.close()
-        if count > 0:
-            return
-        for c in CHEMICALS_SEED:
-            _upsert_chemical(c)
+
+def _import_chemicals_from_csv(file_stream) -> Tuple[int, List[str]]:
+    """Parse a CSV file and upsert chemicals. Returns (count, errors)."""
+    imported = 0
+    errors = []
+    try:
+        text = file_stream.read().decode("utf-8-sig")  # handle BOM
+        reader = csv.DictReader(text.splitlines())
+        # Normalise header names: lowercase, strip spaces
+        fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
+        # Map common column name variants
+        col_map = {
+            "chemical name": "name", "chemical": "name",
+            "molecular formula": "formula", "molecular weight": "mw",
+            "mol. weight": "mw", "mol weight": "mw",
+            "cas number": "cas_no", "cas no": "cas_no", "cas no.": "cas_no", "cas": "cas_no",
+            "supplier": "supplier", "amount": "amount", "quantity": "amount",
+            "expiry": "expiry_date", "expiry date": "expiry_date",
+            "storage": "storage_group", "storage group": "storage_group",
+            "location": "location", "notes": "notes",
+            "reserved for": "reserved_for", "reserved label": "reserved_label",
+            "mw": "mw", "formula": "formula", "name": "name",
+        }
+        for i, row in enumerate(csv.DictReader(text.splitlines()), start=2):
+            # normalise keys
+            norm = {col_map.get(k.strip().lower(), k.strip().lower()): (v or "").strip()
+                    for k, v in row.items()}
+            name = norm.get("name", "").strip()
+            if not name:
+                errors.append(f"Row {i}: skipped (no name)")
+                continue
+            data = {
+                "name":          name,
+                "formula":       norm.get("formula", ""),
+                "mw":            norm.get("mw", ""),
+                "cas_no":        norm.get("cas_no", ""),
+                "supplier":      norm.get("supplier", ""),
+                "amount":        norm.get("amount", ""),
+                "expiry_date":   norm.get("expiry_date", ""),
+                "storage_group": norm.get("storage_group", ""),
+                "location":      norm.get("location", ""),
+                "notes":         norm.get("notes", ""),
+                "reserved_for":  norm.get("reserved_for", ""),
+                "reserved_label":norm.get("reserved_label", ""),
+            }
+            try:
+                _upsert_chemical(data)
+                imported += 1
+            except Exception as e:
+                errors.append(f"Row {i} ({name}): {e}")
+    except Exception as e:
+        errors.append(f"File parse error: {e}")
+    return imported, errors
 
 # ============================================================ EMAIL =========
 
@@ -1513,6 +1489,13 @@ def chemical_request():
     flash(f"Request for {chem['name']} submitted! The lab admin will review it.", "success")
     return redirect(url_for("chemicals"))
 
+@app.route("/chemicals/orders")
+def chemical_orders():
+    """Public view of purchase requests — shows status and admin notes."""
+    init_db()
+    orders = _list_purchase_requests()
+    return render_template("chemical_orders.html", orders=orders)
+
 @app.route("/chemicals/purchase", methods=["GET", "POST"])
 def purchase_request():
     init_db()
@@ -1632,12 +1615,50 @@ def chem_admin_request_status(req_id: int):
 def chem_admin_purchase_status(req_id: int):
     if not is_chem_admin(): abort(403)
     init_db()
-    status = (request.form.get("status") or "").strip()
-    if status not in ("approved","rejected","purchased"):
+    status    = (request.form.get("status") or "").strip()
+    admin_note = (request.form.get("admin_note") or "").strip()
+    if status and status not in ("pending","approved","rejected","ordered","purchased"):
         flash("Invalid status.", "error")
         return redirect(url_for("chem_admin"))
-    _set_purchase_request_status(req_id, status)
-    flash(f"Purchase request #{req_id} marked as {status}.", "success")
+    if status:
+        _set_purchase_request_status(req_id, status, admin_note)
+    elif admin_note:
+        _update_purchase_admin_note(req_id, admin_note)
+    flash(f"Purchase request #{req_id} updated.", "success")
+    return redirect(url_for("chem_admin"))
+
+@app.route("/admin/chemicals/csv-upload", methods=["POST"])
+def chem_admin_csv_upload():
+    if not is_chem_admin(): abort(403)
+    init_db()
+    f = request.files.get("csv_file")
+    if not f or not f.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("chem_admin"))
+    if not f.filename.lower().endswith(".csv"):
+        flash("Please upload a .csv file.", "error")
+        return redirect(url_for("chem_admin"))
+    mode = request.form.get("import_mode", "merge")
+    if mode == "replace":
+        # Delete all chemicals first
+        if USE_POSTGRES:
+            conn = _pg_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM chemicals")
+                conn.commit()
+            finally:
+                _pg_putconn(conn)
+        else:
+            conn = sqlite3.connect(SQLITE_PATH)
+            conn.execute("DELETE FROM chemicals")
+            conn.commit()
+            conn.close()
+    imported, errors = _import_chemicals_from_csv(f.stream)
+    if errors:
+        flash(f"Imported {imported} chemicals. {len(errors)} issue(s): {'; '.join(errors[:3])}", "error")
+    else:
+        flash(f"Successfully imported {imported} chemicals.", "success")
     return redirect(url_for("chem_admin"))
 
 @app.route("/admin/chemicals/export.csv")
@@ -1689,23 +1710,17 @@ def admin_logout():
 def admin_portal():
     pending = db_pending_counts()
     order = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
-    items = []
+    labs = []
     for slug in order:
-        cnt   = pending.get(slug, 0)
-        badge = f' <span class="badge-warn">({cnt} pending)</span>' if cnt else ""
-        items.append(
-            f'<li><strong>{LABS[slug]["title"]}</strong>{badge}<br/>'
-            f'<a href="{url_for("admin_lab",lab_slug=slug)}">Open admin</a>'
-            f' &nbsp;·&nbsp;<a href="{url_for("lab_availability",lab_slug=slug)}">Availability</a>'
-            f' &nbsp;·&nbsp;<a href="{booking_url_for(slug)}">Booking</a></li>')
-    return (
-        '<!doctype html><html><head><meta charset="utf-8"/>'
-        '<meta name="viewport" content="width=device-width,initial-scale=1"/>'
-        '<title>Admin Portal</title><link rel="stylesheet" href="/static/style.css"/></head><body>'
-        '<header class="topbar"><div class="container"><h1>Admin Portal</h1>'
-        '<p class="sub">Select a lab — login required per lab.</p></div></header>'
-        f'<main class="container"><div class="card"><ul class="admin-list">{"".join(items)}</ul>'
-        f'<p><a href="{url_for("index")}">← Back to homepage</a></p></div></main></body></html>')
+        labs.append({
+            "slug":             slug,
+            "title":            LABS[slug]["title"],
+            "pending_count":    pending.get(slug, 0),
+            "admin_url":        url_for("admin_lab", lab_slug=slug),
+            "availability_url": url_for("lab_availability", lab_slug=slug),
+            "booking_url":      booking_url_for(slug),
+        })
+    return render_template("admin_portal.html", labs=labs)
 
 @app.route("/admin/<lab_slug>")
 def admin_lab(lab_slug: str):

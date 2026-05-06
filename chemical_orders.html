@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders — U2ACN2 Nanolab{% endblock %}
+
+{% block body %}
+<main class="container page-main">
+
+  <div class="page-header">
+    <div>
+      <a href="/chemicals" class="back-link">← Chemical Inventory</a>
+      <h1>Purchase Orders</h1>
+      <p class="page-sub">Track the status of chemical purchase requests submitted to the lab.</p>
+    </div>
+    <a href="/chemicals/purchase" class="btn btn-primary">+ New Request</a>
+  </div>
+
+  <style>
+    .orders-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .orders-table th {
+      text-align:left; padding:.65rem .9rem;
+      background:var(--page-bg); color:var(--muted);
+      font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+      border-bottom:2px solid var(--border);
+    }
+    .orders-table td { padding:.7rem .9rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .orders-table tr:hover td { background:var(--accent-light); }
+    .mono { font-family:'IBM Plex Mono',monospace; font-size:.82rem; }
+
+    .status-pill {
+      display:inline-flex; align-items:center; gap:.35rem;
+      font-size:.72rem; font-weight:800; letter-spacing:.06em;
+      text-transform:uppercase; padding:.25rem .75rem; border-radius:20px; white-space:nowrap;
+    }
+    .status-pill::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; }
+    .pill-pending   { background:#fff3cd; color:#856404; }
+    .pill-pending::before { background:#f0ad4e; }
+    .pill-approved  { background:#d1e7dd; color:#0f5132; }
+    .pill-approved::before { background:#198754; }
+    .pill-ordered   { background:#e2d9f3; color:#4a148c; }
+    .pill-ordered::before { background:#6f42c1; }
+    .pill-purchased { background:#d1e7dd; color:#0f5132; }
+    .pill-purchased::before { background:#0d6efd; }
+    .pill-rejected  { background:#f8d7da; color:#842029; }
+    .pill-rejected::before { background:#dc3545; }
+
+    .admin-note-box {
+      margin-top:.4rem; padding:.45rem .7rem;
+      background:var(--accent-light); border-left:3px solid var(--accent);
+      border-radius:0 6px 6px 0; font-size:.82rem; color:var(--text);
+    }
+    .admin-note-label { font-size:.7rem; font-weight:700; text-transform:uppercase;
+                        letter-spacing:.07em; color:var(--accent); margin-bottom:.2rem; }
+
+    .empty-orders { text-align:center; padding:4rem 2rem; color:var(--muted); }
+    .empty-orders h3 { margin-bottom:.5rem; }
+
+    .legend { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem;
+              background:var(--card-bg); border:1px solid var(--border);
+              border-radius:10px; padding:.85rem 1.2rem; }
+    .legend-item { display:flex; align-items:center; gap:.5rem; font-size:.82rem; }
+  </style>
+
+  <!-- Status legend -->
+  <div class="legend">
+    <span class="legend-item"><span class="status-pill pill-pending">Pending</span> Awaiting review</span>
+    <span class="legend-item"><span class="status-pill pill-approved">Approved</span> Approved for purchase</span>
+    <span class="legend-item"><span class="status-pill pill-ordered">Ordered</span> Order placed with supplier</span>
+    <span class="legend-item"><span class="status-pill pill-purchased">Purchased</span> Received in lab</span>
+    <span class="legend-item"><span class="status-pill pill-rejected">Rejected</span> Not approved</span>
+  </div>
+
+  {% if orders %}
+  <div class="card" style="overflow-x:auto;">
+    <table class="orders-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Material</th>
+          <th>Formula / CAS</th>
+          <th>Amount</th>
+          <th>Requested by</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Lab Update</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td style="color:var(--muted);font-size:.8rem;">#{{ o.id }}</td>
+          <td>
+            <strong>{{ o.material_name }}</strong>
+            {% if o.specifications %}
+            <br/><small style="color:var(--muted);">{{ o.specifications }}</small>
+            {% endif %}
+          </td>
+          <td>
+            {% if o.formula %}<div class="mono">{{ o.formula }}</div>{% endif %}
+            {% if o.cas_number and o.cas_number not in ('','---') %}
+            <div style="font-size:.78rem;color:var(--muted);">CAS: {{ o.cas_number }}</div>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">{{ o.amount }} {{ o.unit }}</td>
+          <td>
+            {{ o.requester_first_name }} {{ o.requester_surname }}
+            {% if o.comments %}
+            <br/><small style="color:var(--muted);font-style:italic;">{{ o.comments }}</small>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;color:var(--muted);font-size:.82rem;">
+            {{ o.created_at[:10] if o.created_at else '—' }}
+          </td>
+          <td>
+            <span class="status-pill pill-{{ o.status }}">{{ o.status }}</span>
+          </td>
+          <td style="min-width:180px;">
+            {% if o.admin_note %}
+            <div class="admin-note-box">
+              <div class="admin-note-label">Lab note</div>
+              {{ o.admin_note }}
+            </div>
+            {% else %}
+            <span style="color:var(--muted);font-size:.82rem;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-orders">
+    <h3>No purchase requests yet</h3>
+    <p>Submit a request for a chemical that's not currently in the inventory.</p>
+    <a href="/chemicals/purchase" class="btn btn-primary" style="margin-top:1rem;">Submit Purchase Request</a>
+  </div>
+  {% endif %}
+
+</main>
+{% endblock %}
