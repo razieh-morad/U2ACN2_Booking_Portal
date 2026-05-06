@@ -262,6 +262,16 @@ def _migrate_postgres(cur):
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
     """)
+    # Migrate existing tables — add admin_note if it doesn't exist
+    cur.execute("""
+        ALTER TABLE purchase_requests
+        ADD COLUMN IF NOT EXISTS admin_note TEXT DEFAULT '';
+    """)
+    # Also ensure chemical_requests and chemicals tables have all expected columns
+    cur.execute("""
+        ALTER TABLE chemical_requests
+        ADD COLUMN IF NOT EXISTS purpose TEXT DEFAULT '';
+    """)
 
 def _sqlite_existing_columns(conn: sqlite3.Connection) -> set:
     return {r[1] for r in conn.execute("PRAGMA table_info(bookings);").fetchall()}
@@ -523,7 +533,13 @@ def _list_chemical_requests(status: Optional[str] = None) -> List[Dict]:
                         FROM chemical_requests cr JOIN chemicals c ON cr.chem_id=c.id
                         ORDER BY cr.id DESC""")
                 cols = [d.name for d in cur.description]
-                return [dict(zip(cols, r)) for r in cur.fetchall()]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                # Normalise datetime objects to ISO strings
+                for row in rows:
+                    for k, v in row.items():
+                        if hasattr(v, 'isoformat'):
+                            row[k] = v.isoformat()
+                return rows
         finally:
             _pg_putconn(conn)
     else:
@@ -600,7 +616,12 @@ def _list_purchase_requests(status: Optional[str] = None) -> List[Dict]:
                 else:
                     cur.execute("SELECT * FROM purchase_requests ORDER BY id DESC")
                 cols = [d.name for d in cur.description]
-                return [dict(zip(cols, r)) for r in cur.fetchall()]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                for row in rows:
+                    for k, v in row.items():
+                        if hasattr(v, 'isoformat'):
+                            row[k] = v.isoformat()
+                return rows
         finally:
             _pg_putconn(conn)
     else:
