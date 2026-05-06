@@ -107,8 +107,7 @@ SMTP_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", "").strip()
 BOOKING_ADMIN_EMAIL = os.environ.get("BOOKING_ADMIN_EMAIL", SMTP_FROM_EMAIL).strip()
 
 def smtp_ready() -> bool:
-    """True when email sending is configured."""
-    return bool(RESEND_API_KEY and SMTP_FROM_EMAIL)
+    return bool(SMTP_FROM_EMAIL and (BREVO_API_KEY or RESEND_API_KEY))
 
 # ============================================================= DB SCHEMA ====
 
