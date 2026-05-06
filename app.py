@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import hmac
+import json as _json
 import os
 import sqlite3
 import smtplib
 import threading
+import urllib.request
 import uuid
 from datetime import datetime, date, time, timedelta
 from email.message import EmailMessage
@@ -92,23 +94,22 @@ PURCHASE_NOTIFY_EMAILS = [
     if e.strip()
 ]
 
-# --------------------------------------------------------- SMTP (shared) ----
+# --------------------------------------------------------- EMAIL config ----
+# Uses Resend HTTP API — works on Render free tier (SMTP ports are blocked).
+# Sign up free at resend.com, create an API key, add your sending domain.
 
-SMTP_HOST      = os.environ.get("SMTP_HOST",      "").strip()
-SMTP_PORT      = int(os.environ.get("SMTP_PORT",  "587"))
-SMTP_USE_TLS   = os.environ.get("SMTP_USE_TLS",   "true").lower() in ("1","true","yes","y")
-SMTP_FROM_NAME = os.environ.get("SMTP_FROM_NAME", "U2ACN2 Nanolab Portal")
-SMTP_USER      = os.environ.get("SMTP_USER",      "").strip()
-SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD",  "").strip()
+RESEND_API_KEY  = os.environ.get("RESEND_API_KEY",  "").strip()
+SMTP_FROM_NAME  = os.environ.get("SMTP_FROM_NAME",  "U2ACN2 Nanolab Portal")
+SMTP_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", "").strip()
 
-BOOKING_ADMIN_EMAIL = os.environ.get("BOOKING_ADMIN_EMAIL", SMTP_USER).strip()
+# BOOKING_ADMIN_EMAIL — who receives new booking notifications
+BOOKING_ADMIN_EMAIL = os.environ.get("BOOKING_ADMIN_EMAIL", SMTP_FROM_EMAIL).strip()
 
 def smtp_ready() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+    """True when email sending is configured."""
+    return bool(RESEND_API_KEY and SMTP_FROM_EMAIL)
 
 # ============================================================= DB SCHEMA ====
-
-# ------------- Booking columns (unchanged) ----------------------------------
 
 PG_COLUMNS = {
     "lab_slug":              "TEXT NOT NULL",
@@ -213,7 +214,6 @@ def _migrate_postgres(cur):
         cur.execute(f'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "{col}" {ddl};')
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
 
-    # Chemical inventory tables
     cur.execute("""
         CREATE TABLE IF NOT EXISTS chemicals (
             id SERIAL PRIMARY KEY,
@@ -273,7 +273,6 @@ def _migrate_sqlite(conn: sqlite3.Connection):
             conn.execute(f"ALTER TABLE bookings ADD COLUMN {col} {ddl};")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_lab_date ON bookings(lab_slug, booking_date);")
 
-    # Chemical inventory tables
     conn.execute("""
         CREATE TABLE IF NOT EXISTS chemicals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -350,7 +349,6 @@ def init_db():
 # ================================================ Chemical DB helpers =======
 
 def _chem_conn():
-    """Return a sqlite3 connection (for non-PG deployments)."""
     c = sqlite3.connect(SQLITE_PATH)
     c.row_factory = sqlite3.Row
     return c
@@ -410,7 +408,6 @@ def _get_chemical_by_id(chem_id: int) -> Optional[Dict]:
         return dict(row) if row else None
 
 def _upsert_chemical(data: Dict) -> int:
-    """Insert or update a chemical by name. Returns id."""
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
@@ -716,7 +713,6 @@ CHEMICALS_SEED = [
 ]
 
 def _seed_chemicals():
-    """Seed the chemicals table if empty."""
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
@@ -740,28 +736,28 @@ def _seed_chemicals():
 # ============================================================ EMAIL =========
 
 def _send_email(to: str, subject: str, body: str) -> None:
+    """Send via Resend HTTP API. No SMTP — works on Render free tier."""
     if not smtp_ready():
-        raise RuntimeError("SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASSWORD.")
-    msg = EmailMessage()
-    msg["From"]     = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
-    msg["To"]       = to
-    msg["Subject"]  = subject
-    msg["Reply-To"] = SMTP_USER
-    msg.set_content(body)
-    # Port 465 = implicit SSL; Port 587 = STARTTLS; anything else = plain
-    if SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as s:
-            s.login(SMTP_USER, SMTP_PASSWORD)
-            s.send_message(msg)
-    elif SMTP_USE_TLS:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
-            s.ehlo(); s.starttls(); s.ehlo()
-            s.login(SMTP_USER, SMTP_PASSWORD)
-            s.send_message(msg)
-    else:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
-            s.ehlo(); s.login(SMTP_USER, SMTP_PASSWORD)
-            s.send_message(msg)
+        raise RuntimeError(
+            "Email not configured. Set RESEND_API_KEY and SMTP_FROM_EMAIL env vars.")
+    payload = _json.dumps({
+        "from": f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>",
+        "to":   [to],
+        "subject": subject,
+        "text": body,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type":  "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        if resp.status not in (200, 201):
+            raise RuntimeError(f"Resend API error {resp.status}: {resp.read().decode()}")
 
 def _send_async(to: str, subject: str, body: str) -> None:
     def _run():
@@ -770,17 +766,15 @@ def _send_async(to: str, subject: str, body: str) -> None:
         except Exception as e:
             import sys
             print(f"[EMAIL ERROR] to={to} subject={subject!r} error={e}", file=sys.stderr)
-    t = threading.Thread(target=_run, daemon=False)
-    t.start()
+    threading.Thread(target=_run, daemon=False).start()
 
 def _send_async_multi(recipients: List[str], subject: str, body: str) -> None:
     for r in recipients:
         _send_async(r, subject, body)
 
-# ------------ Chemical-specific email notifications --------------------------
+# ------------ Chemical-specific email notifications -------------------------
 
 def notify_chem_request(chem_name: str, req: Dict) -> None:
-    """Notify chem admin when someone requests an in-stock chemical."""
     if not smtp_ready() or not CHEM_ADMIN_EMAIL:
         return
     body = (
@@ -791,7 +785,8 @@ def notify_chem_request(chem_name: str, req: Dict) -> None:
         f"  Purpose  : {req.get('purpose','—')}\n\n"
         f"Please review in the admin panel.\n\nRegards,\n{SMTP_FROM_NAME}\n"
     )
-    _send_async(CHEM_ADMIN_EMAIL, f"[Chemical Request] {chem_name} — {req['first_name']} {req['surname']}", body)
+    _send_async(CHEM_ADMIN_EMAIL,
+                f"[Chemical Request] {chem_name} — {req['first_name']} {req['surname']}", body)
 
 def notify_user_chem_request_received(req: Dict, chem_name: str) -> None:
     if not smtp_ready(): return
@@ -806,33 +801,31 @@ def notify_user_chem_request_received(req: Dict, chem_name: str) -> None:
     _send_async(req["requester_email"], f"Chemical request received — {chem_name}", body)
 
 def notify_chem_purchase_request(pr: Dict) -> None:
-    """Notify all purchase notification recipients of a new purchase request."""
     if not smtp_ready() or not PURCHASE_NOTIFY_EMAILS:
         return
     body = (
         f"New chemical purchase request submitted.\n\n"
-        f"  Material     : {pr['material_name']}\n"
-        f"  Formula      : {pr.get('formula','—')}\n"
-        f"  CAS No.      : {pr.get('cas_number','—')}\n"
+        f"  Material      : {pr['material_name']}\n"
+        f"  Formula       : {pr.get('formula','—')}\n"
+        f"  CAS No.       : {pr.get('cas_number','—')}\n"
         f"  Specifications: {pr.get('specifications','—')}\n"
-        f"  Amount       : {pr['amount']} {pr['unit']}\n"
-        f"  Requester    : {pr['requester_first_name']} {pr['requester_surname']} ({pr['requester_email']})\n"
-        f"  Comments     : {pr.get('comments','—')}\n\n"
+        f"  Amount        : {pr['amount']} {pr['unit']}\n"
+        f"  Requester     : {pr['requester_first_name']} {pr['requester_surname']} ({pr['requester_email']})\n"
+        f"  Comments      : {pr.get('comments','—')}\n\n"
         f"Please review in the admin panel.\n\nRegards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async_multi(
         PURCHASE_NOTIFY_EMAILS,
         f"[Purchase Request] {pr['material_name']} — {pr['requester_first_name']} {pr['requester_surname']}",
-        body
-    )
+        body)
 
 def notify_user_purchase_received(pr: Dict) -> None:
     if not smtp_ready(): return
     body = (
         f"Hello {pr['requester_first_name']},\n\n"
         f"Your purchase request for {pr['material_name']} has been submitted.\n\n"
-        f"  Amount   : {pr['amount']} {pr['unit']}\n"
-        f"  Status   : Pending\n\n"
+        f"  Amount : {pr['amount']} {pr['unit']}\n"
+        f"  Status : Pending\n\n"
         f"We will contact you once the request is reviewed.\n\n"
         f"Regards,\n{SMTP_FROM_NAME}\n"
     )
@@ -1089,6 +1082,16 @@ def notify_user_cancelled(lab_slug: str, b: Dict) -> None:
         f"Regards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async(b["user_email"], f"Booking cancelled — {lab_title}", body)
+
+def notify_user_reminder(lab_slug: str, b: Dict) -> None:
+    if not smtp_ready(): return
+    lab_title = LABS[lab_slug]["title"]
+    body = (
+        f"Hello {b['user_name']},\n\nReminder: you have a booking tomorrow.\n\n"
+        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(b["user_email"], f"Reminder: booking tomorrow — {lab_title}", body)
 
 # ----------------------------------------------------------- Admin auth ------
 
@@ -1377,10 +1380,8 @@ def db_get_reminder_candidates() -> List[Dict[str, Any]]:
 
 # ================================================================= ROUTES ===
 
-
 @app.get("/debug/init")
 def debug_init():
-    """Diagnostic route — remove after confirming app works."""
     import traceback
     results = {}
     try:
@@ -1389,49 +1390,44 @@ def debug_init():
     except Exception as e:
         results["init_db"] = f"ERROR: {traceback.format_exc()}"
     try:
-        chems = _get_chemicals_all()
-        results["chemicals_count"] = len(chems)
+        results["chemicals_count"] = len(_get_chemicals_all())
     except Exception as e:
         results["chemicals_count"] = f"ERROR: {e}"
     try:
-        chem_reqs = _list_chemical_requests()
-        results["chem_requests_count"] = len(chem_reqs)
+        results["chem_requests_count"] = len(_list_chemical_requests())
     except Exception as e:
         results["chem_requests_count"] = f"ERROR: {e}"
     try:
-        prs = _list_purchase_requests()
-        results["purchase_requests_count"] = len(prs)
+        results["purchase_requests_count"] = len(_list_purchase_requests())
     except Exception as e:
         results["purchase_requests_count"] = f"ERROR: {e}"
     return jsonify(results)
 
-
 @app.get("/debug/email")
 def debug_email():
-    """Send a test email to BOOKING_ADMIN_EMAIL. Remove after confirming email works."""
     import traceback
-    result = {}
-    result["smtp_ready"] = smtp_ready()
-    result["SMTP_HOST"]  = SMTP_HOST or "(not set)"
-    result["SMTP_PORT"]  = SMTP_PORT
-    result["SMTP_USER"]  = SMTP_USER or "(not set)"
-    result["SMTP_USE_TLS"] = SMTP_USE_TLS
-    result["BOOKING_ADMIN_EMAIL"] = BOOKING_ADMIN_EMAIL or "(not set)"
-    result["CHEM_ADMIN_EMAIL"]    = CHEM_ADMIN_EMAIL or "(not set)"
-    result["PURCHASE_NOTIFY_EMAILS"] = PURCHASE_NOTIFY_EMAILS
+    result = {
+        "smtp_ready":          smtp_ready(),
+        "RESEND_API_KEY":      ("set (" + RESEND_API_KEY[:6] + "...)") if RESEND_API_KEY else "(not set)",
+        "SMTP_FROM_EMAIL":     SMTP_FROM_EMAIL or "(not set)",
+        "SMTP_FROM_NAME":      SMTP_FROM_NAME,
+        "BOOKING_ADMIN_EMAIL": BOOKING_ADMIN_EMAIL or "(not set)",
+        "CHEM_ADMIN_EMAIL":    CHEM_ADMIN_EMAIL or "(not set)",
+        "PURCHASE_NOTIFY_EMAILS": PURCHASE_NOTIFY_EMAILS,
+    }
     if smtp_ready():
         try:
             _send_email(
-                BOOKING_ADMIN_EMAIL or SMTP_USER,
+                BOOKING_ADMIN_EMAIL or SMTP_FROM_EMAIL,
                 "U2ACN2 Portal — email test",
                 f"This is a test email from the U2ACN2 Nanolab Portal.\n\n"
-                f"SMTP_HOST={SMTP_HOST}\nSMTP_PORT={SMTP_PORT}\nSMTP_USER={SMTP_USER}\n"
+                f"Sender: {SMTP_FROM_EMAIL}\nRecipient: {BOOKING_ADMIN_EMAIL}\n"
             )
             result["send_result"] = "SUCCESS — check your inbox"
-        except Exception as e:
+        except Exception:
             result["send_result"] = f"FAILED: {traceback.format_exc()}"
     else:
-        result["send_result"] = "SKIPPED — SMTP not configured"
+        result["send_result"] = "SKIPPED — set RESEND_API_KEY and SMTP_FROM_EMAIL"
     return jsonify(result)
 
 @app.get("/health")
@@ -1443,7 +1439,7 @@ def index():
     init_db()
     pending = db_pending_counts()
     try:
-        chem_pending = len(_list_chemical_requests(status="pending"))
+        chem_pending     = len(_list_chemical_requests(status="pending"))
         purchase_pending = len(_list_purchase_requests(status="pending"))
     except Exception:
         chem_pending = 0
@@ -1467,10 +1463,7 @@ def index():
 def chemicals():
     init_db()
     q = (request.args.get("q") or "").strip()
-    if q:
-        results = _search_chemicals(q)
-    else:
-        results = _get_chemicals_all()
+    results = _search_chemicals(q) if q else _get_chemicals_all()
     return render_template("chemicals.html", chemicals=results, query=q)
 
 @app.route("/chemicals/request", methods=["POST"])
@@ -1482,21 +1475,17 @@ def chemical_request():
     email      = (request.form.get("email") or "").strip()
     quantity   = (request.form.get("quantity") or "").strip()
     purpose    = (request.form.get("purpose") or "").strip()
-
     errors = []
     if not first_name: errors.append("First name is required.")
     if not surname:    errors.append("Surname is required.")
     if not email or "@" not in email: errors.append("Valid email is required.")
     if not quantity:   errors.append("Quantity is required.")
-
     chem = _get_chemical_by_id(chem_id)
     if not chem: errors.append("Chemical not found.")
-
     if errors:
         flash(" ".join(errors), "error")
         return redirect(url_for("chemicals"))
-
-    rid = _add_chemical_request(chem_id, first_name, surname, email, quantity, purpose)
+    _add_chemical_request(chem_id, first_name, surname, email, quantity, purpose)
     req = {"first_name": first_name, "surname": surname, "requester_email": email,
            "quantity": quantity, "purpose": purpose}
     notify_chem_request(chem["name"], req)
@@ -1508,10 +1497,8 @@ def chemical_request():
 def purchase_request():
     init_db()
     if request.method == "GET":
-        prefill = {k: (request.args.get(k) or "") for k in
-                   ("material_name","formula","cas_number")}
+        prefill = {k: (request.args.get(k) or "") for k in ("material_name","formula","cas_number")}
         return render_template("purchase_request.html", prefill=prefill)
-
     data = {
         "material_name":        (request.form.get("material_name") or "").strip(),
         "formula":              (request.form.get("formula") or "").strip(),
@@ -1531,11 +1518,9 @@ def purchase_request():
     if not data["requester_surname"]:    errors.append("Surname is required.")
     if not data["requester_email"] or "@" not in data["requester_email"]:
         errors.append("Valid email is required.")
-
     if errors:
         flash(" ".join(errors), "error")
         return render_template("purchase_request.html", prefill=data, errors=errors)
-
     _add_purchase_request(data)
     notify_chem_purchase_request(data)
     notify_user_purchase_received(data)
@@ -1565,18 +1550,14 @@ def chem_admin():
     if not is_chem_admin():
         return redirect(url_for("chem_admin_login", next=request.path))
     init_db()
-    all_chems    = _get_chemicals_all()
-    chem_reqs    = _list_chemical_requests()
-    purchase_reqs = _list_purchase_requests()
     return render_template("chem_admin.html",
-                           chemicals=all_chems,
-                           chem_requests=chem_reqs,
-                           purchase_requests=purchase_reqs)
+                           chemicals=_get_chemicals_all(),
+                           chem_requests=_list_chemical_requests(),
+                           purchase_requests=_list_purchase_requests())
 
 @app.route("/admin/chemicals/add", methods=["POST"])
 def chem_admin_add():
-    if not is_chem_admin():
-        abort(403)
+    if not is_chem_admin(): abort(403)
     init_db()
     data = {k: (request.form.get(k) or "").strip() for k in
             ("name","formula","mw","cas_no","supplier","amount","expiry_date",
@@ -1604,11 +1585,9 @@ def chem_admin_reserve(chem_id: int):
     init_db()
     chem = _get_chemical_by_id(chem_id)
     if not chem: abort(404)
-    reserved_for   = (request.form.get("reserved_for") or "").strip()
-    reserved_label = (request.form.get("reserved_label") or "").strip()
     data = dict(chem)
-    data["reserved_for"]   = reserved_for
-    data["reserved_label"] = reserved_label
+    data["reserved_for"]   = (request.form.get("reserved_for") or "").strip()
+    data["reserved_label"] = (request.form.get("reserved_label") or "").strip()
     _upsert_chemical(data)
     flash(f"Reservation updated for '{chem['name']}'.", "success")
     return redirect(url_for("chem_admin"))
@@ -1622,7 +1601,6 @@ def chem_admin_request_status(req_id: int):
         flash("Invalid status.", "error")
         return redirect(url_for("chem_admin"))
     _set_chemical_request_status(req_id, status)
-    # Notify user
     reqs = _list_chemical_requests()
     req = next((r for r in reqs if r["id"] == req_id), None)
     if req:
@@ -1652,10 +1630,9 @@ def chem_admin_export():
     w.writerow(["ID","Name","Formula","MW","CAS No.","Supplier","Amount",
                 "Expiry Date","Storage Group","Location","Notes","Reserved For","Reserved Label"])
     for c in chems:
-        w.writerow([c.get("id",""), c.get("name",""), c.get("formula",""), c.get("mw",""),
-                    c.get("cas_no",""), c.get("supplier",""), c.get("amount",""),
-                    c.get("expiry_date",""), c.get("storage_group",""), c.get("location",""),
-                    c.get("notes",""), c.get("reserved_for",""), c.get("reserved_label","")])
+        w.writerow([c.get(k,"") for k in
+                    ("id","name","formula","mw","cas_no","supplier","amount",
+                     "expiry_date","storage_group","location","notes","reserved_for","reserved_label")])
     resp = make_response(si.getvalue())
     resp.headers["Content-Type"] = "text/csv"
     resp.headers["Content-Disposition"] = "attachment; filename=chemicals.csv"
@@ -1673,9 +1650,9 @@ def admin_login_lab(lab_slug: str):
         if (hmac.compare_digest(user.lower(), ADMIN[lab_slug]["username"].lower())
                 and hmac.compare_digest(pw, ADMIN[lab_slug]["password"])):
             session.clear()
-            session["is_admin"]        = True
-            session["admin_lab"]       = lab_slug
-            session["admin_username"]  = ADMIN[lab_slug]["username"]
+            session["is_admin"]       = True
+            session["admin_lab"]      = lab_slug
+            session["admin_username"] = ADMIN[lab_slug]["username"]
             return redirect(request.form.get("next") or url_for("admin_lab", lab_slug=lab_slug))
         flash("Invalid credentials.", "error")
     return render_template("admin_login.html", lab_slug=lab_slug,
@@ -1715,10 +1692,9 @@ def admin_lab(lab_slug: str):
     if lab_slug not in LABS: abort(404)
     redir = require_admin(lab_slug)
     if redir: return redir
-    bookings = db_list_bookings(lab_slug)
     return render_template("admin.html", lab_slug=lab_slug,
                            lab_title=LABS[lab_slug]["title"],
-                           bookings=bookings,
+                           bookings=db_list_bookings(lab_slug),
                            admin_username=session.get("admin_username",""))
 
 @app.route("/admin/<lab_slug>/booking/<int:booking_id>", methods=["GET","POST"])
@@ -1745,8 +1721,7 @@ def admin_edit_booking(lab_slug: str, booking_id: int):
             except Exception: pass
             flash("Booking rejected.", "success")
         elif action == "delete":
-            notify_user = request.form.get("notify_user") == "1"
-            if notify_user:
+            if request.form.get("notify_user") == "1":
                 try: notify_user_cancelled(lab_slug, b)
                 except Exception: pass
             db_delete_booking(booking_id)
@@ -1776,11 +1751,11 @@ def prefill_booking(lab_slug: str):
 def lab_generic(lab_slug: str):
     if lab_slug not in LABS: abort(404)
     if lab_slug in ("furnace","xps"): return redirect(booking_url_for(lab_slug))
-    lab = LABS[lab_slug]
+    lab  = LABS[lab_slug]
     form = merge_prefill(default_booking_form(), request.args)
     errors = []
     if request.method == "POST":
-        slots = collect_selected_slots()
+        slots      = collect_selected_slots()
         user_name  = (request.form.get("user_name") or "").strip()
         user_email = (request.form.get("user_email") or "").strip()
         notes      = (request.form.get("notes") or "").strip()
@@ -1788,8 +1763,7 @@ def lab_generic(lab_slug: str):
         if not user_email or "@" not in user_email: errors.append("Valid email required.")
         if not slots: errors.append("Select at least one slot.")
         for d, s, e in slots:
-            errs = check_booking_rules(lab_slug, d, s, e)
-            errors.extend(errs)
+            errors.extend(check_booking_rules(lab_slug, d, s, e))
             if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is already taken.")
         if not errors:
             group_id = str(uuid.uuid4()) if len(slots) > 1 else None
@@ -1805,9 +1779,9 @@ def lab_generic(lab_slug: str):
             b = db_get_booking(first_id)
             try:
                 notify_user_submission(lab_slug, b)
-                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
-                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
-                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+                notify_admin_new_booking(lab_slug, b,
+                    url_for("approve_booking", token=b["approval_token"], _external=True),
+                    url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
             flash(f"Booking submitted for {lab['title']}! You'll receive a confirmation email.", "success")
             return redirect(url_for("lab_generic", lab_slug=lab_slug))
@@ -1820,11 +1794,11 @@ def lab_generic(lab_slug: str):
 @app.route("/furnace", methods=["GET","POST"])
 def furnace():
     lab_slug = "furnace"
-    lab = LABS[lab_slug]
+    lab  = LABS[lab_slug]
     form = merge_prefill(default_booking_form(), request.args)
     errors = []
     if request.method == "POST":
-        slots = collect_selected_slots()
+        slots      = collect_selected_slots()
         user_name  = (request.form.get("user_name") or "").strip()
         user_email = (request.form.get("user_email") or "").strip()
         for d, s, e in slots:
@@ -1834,8 +1808,7 @@ def furnace():
         if not user_email or "@" not in user_email: errors.append("Valid email required.")
         if not slots: errors.append("Select at least one slot.")
         for d, s, e in slots:
-            errs = check_booking_rules(lab_slug, d, s, e)
-            errors.extend(errs)
+            errors.extend(check_booking_rules(lab_slug, d, s, e))
             if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is taken.")
         if not errors:
             group_id = str(uuid.uuid4()) if len(slots) > 1 else None
@@ -1844,15 +1817,15 @@ def furnace():
                 payload = {
                     "lab_slug": lab_slug, "booking_group_id": group_id,
                     "user_name": user_name, "user_email": user_email,
-                    "nanomaterial_type": (request.form.get("nanomaterial_type") or "").strip(),
-                    "melting_point": (request.form.get("melting_point") or "").strip(),
-                    "material_density": (request.form.get("material_density") or "").strip(),
-                    "anneal_temp_c": (request.form.get("anneal_temp_c") or "").strip(),
-                    "anneal_time_h": (request.form.get("anneal_time_h") or "").strip(),
-                    "gas_type": (request.form.get("gas_type") or "").strip(),
-                    "pressure": (request.form.get("pressure") or "").strip(),
-                    "vacuum": request.form.get("vacuum","no") == "yes",
-                    "notes": (request.form.get("notes") or "").strip(),
+                    "nanomaterial_type":  (request.form.get("nanomaterial_type") or "").strip(),
+                    "melting_point":      (request.form.get("melting_point") or "").strip(),
+                    "material_density":   (request.form.get("material_density") or "").strip(),
+                    "anneal_temp_c":      (request.form.get("anneal_temp_c") or "").strip(),
+                    "anneal_time_h":      (request.form.get("anneal_time_h") or "").strip(),
+                    "gas_type":           (request.form.get("gas_type") or "").strip(),
+                    "pressure":           (request.form.get("pressure") or "").strip(),
+                    "vacuum":             request.form.get("vacuum","no") == "yes",
+                    "notes":              (request.form.get("notes") or "").strip(),
                     "booking_date": d, "start_time": s, "end_time": e,
                     "status": "pending", "approval_token": str(uuid.uuid4()),
                     "cancel_token": str(uuid.uuid4())}
@@ -1861,9 +1834,9 @@ def furnace():
             b = db_get_booking(first_id)
             try:
                 notify_user_submission(lab_slug, b)
-                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
-                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
-                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+                notify_admin_new_booking(lab_slug, b,
+                    url_for("approve_booking", token=b["approval_token"], _external=True),
+                    url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
             flash("Furnace booking submitted!", "success")
             return redirect(url_for("furnace"))
@@ -1876,19 +1849,18 @@ def furnace():
 @app.route("/xps", methods=["GET","POST"])
 def xps():
     lab_slug = "xps"
-    lab = LABS[lab_slug]
+    lab  = LABS[lab_slug]
     form = merge_prefill(default_booking_form(), request.args)
     errors = []
     if request.method == "POST":
-        slots = collect_selected_slots()
+        slots      = collect_selected_slots()
         user_name  = (request.form.get("user_name") or "").strip()
         user_email = (request.form.get("user_email") or "").strip()
         if not user_name:  errors.append("Name is required.")
         if not user_email or "@" not in user_email: errors.append("Valid email required.")
         if not slots: errors.append("Select at least one slot.")
         for d, s, e in slots:
-            errs = check_booking_rules(lab_slug, d, s, e)
-            errors.extend(errs)
+            errors.extend(check_booking_rules(lab_slug, d, s, e))
             if has_conflict(lab_slug, d, s, e): errors.append(f"Slot {d} {s}–{e} is taken.")
         if not errors:
             group_id = str(uuid.uuid4()) if len(slots) > 1 else None
@@ -1897,14 +1869,14 @@ def xps():
                 payload = {
                     "lab_slug": lab_slug, "booking_group_id": group_id,
                     "user_name": user_name, "user_email": user_email,
-                    "sample_name": (request.form.get("sample_name") or "").strip(),
-                    "sample_count": request.form.get("sample_count"),
-                    "elements_of_interest": (request.form.get("elements_of_interest") or "").strip(),
-                    "analysis_type": (request.form.get("analysis_type") or "").strip(),
-                    "charge_neutralizer": request.form.get("charge_neutralizer","no") == "yes",
-                    "mounting_method": (request.form.get("mounting_method") or "").strip(),
-                    "outgassing_risk": (request.form.get("outgassing_risk") or "").strip(),
-                    "notes": (request.form.get("notes") or "").strip(),
+                    "sample_name":           (request.form.get("sample_name") or "").strip(),
+                    "sample_count":          request.form.get("sample_count"),
+                    "elements_of_interest":  (request.form.get("elements_of_interest") or "").strip(),
+                    "analysis_type":         (request.form.get("analysis_type") or "").strip(),
+                    "charge_neutralizer":    request.form.get("charge_neutralizer","no") == "yes",
+                    "mounting_method":       (request.form.get("mounting_method") or "").strip(),
+                    "outgassing_risk":       (request.form.get("outgassing_risk") or "").strip(),
+                    "notes":                 (request.form.get("notes") or "").strip(),
                     "booking_date": d, "start_time": s, "end_time": e,
                     "status": "pending", "approval_token": str(uuid.uuid4()),
                     "cancel_token": str(uuid.uuid4())}
@@ -1913,9 +1885,9 @@ def xps():
             b = db_get_booking(first_id)
             try:
                 notify_user_submission(lab_slug, b)
-                approve_url = url_for("approve_booking", token=b["approval_token"], _external=True)
-                reject_url  = url_for("reject_booking",  token=b["approval_token"], _external=True)
-                notify_admin_new_booking(lab_slug, b, approve_url, reject_url)
+                notify_admin_new_booking(lab_slug, b,
+                    url_for("approve_booking", token=b["approval_token"], _external=True),
+                    url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
             flash("XPS booking submitted!", "success")
             return redirect(url_for("xps"))
@@ -1954,16 +1926,6 @@ def cancel_booking_get(token: str):
         return f"<p>Booking #{b['id']} cancelled. <a href='/'>Home</a></p>"
     return (f"<p>Cancel booking #{b['id']} for {b['lab_slug']} on {b['booking_date']}?</p>"
             f"<form method='post'><button type='submit'>Confirm Cancellation</button></form>")
-
-def notify_user_reminder(lab_slug: str, b: Dict) -> None:
-    if not smtp_ready(): return
-    lab_title = LABS[lab_slug]["title"]
-    body = (
-        f"Hello {b['user_name']},\n\nReminder: you have a booking tomorrow.\n\n"
-        f" Lab  : {lab_title}\n Slot : {_slot_str(b)}\n Ref  : #{b['id']}\n\n"
-        f"Regards,\n{SMTP_FROM_NAME}\n"
-    )
-    _send_async(b["user_email"], f"Reminder: booking tomorrow — {lab_title}", body)
 
 @app.get("/reminders/send")
 def send_reminders():
