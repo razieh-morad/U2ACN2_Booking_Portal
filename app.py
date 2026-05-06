@@ -99,6 +99,7 @@ PURCHASE_NOTIFY_EMAILS = [
 # Sign up free at resend.com, create an API key, add your sending domain.
 
 RESEND_API_KEY  = os.environ.get("RESEND_API_KEY",  "").strip()
+BREVO_API_KEY   = os.environ.get("BREVO_API_KEY",   "").strip()
 SMTP_FROM_NAME  = os.environ.get("SMTP_FROM_NAME",  "U2ACN2 Nanolab Portal")
 SMTP_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", "").strip()
 
@@ -736,10 +737,29 @@ def _seed_chemicals():
 # ============================================================ EMAIL =========
 
 def _send_email(to: str, subject: str, body: str) -> None:
-    """Send via Resend HTTP API. No SMTP — works on Render free tier."""
     if not smtp_ready():
-        raise RuntimeError(
-            "Email not configured. Set RESEND_API_KEY and SMTP_FROM_EMAIL env vars.")
+        raise RuntimeError("Email not configured. Set BREVO_API_KEY and SMTP_FROM_EMAIL.")
+    if BREVO_API_KEY:
+        payload = _json.dumps({
+            "sender":      {"name": SMTP_FROM_NAME, "email": SMTP_FROM_EMAIL},
+            "to":          [{"email": to}],
+            "subject":     subject,
+            "textContent": body,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=payload,
+            headers={
+                "api-key":      BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept":       "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status not in (200, 201):
+                raise RuntimeError(f"Brevo API error {resp.status}: {resp.read().decode()}")
+        return
     payload = _json.dumps({
         "from": f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>",
         "to":   [to],
@@ -1408,6 +1428,7 @@ def debug_email():
     import traceback
     result = {
         "smtp_ready":          smtp_ready(),
+        "BREVO_API_KEY":       ("set (" + BREVO_API_KEY[:8] + "...)") if BREVO_API_KEY else "(not set)",
         "RESEND_API_KEY":      ("set (" + RESEND_API_KEY[:6] + "...)") if RESEND_API_KEY else "(not set)",
         "SMTP_FROM_EMAIL":     SMTP_FROM_EMAIL or "(not set)",
         "SMTP_FROM_NAME":      SMTP_FROM_NAME,
