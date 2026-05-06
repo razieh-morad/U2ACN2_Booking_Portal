@@ -66,6 +66,14 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 0;
   z-index: 100;
+  color: #fff;
+}
+.topbar h1, .topbar h2, .topbar h3,
+.topbar p, .topbar .sub {
+  color: #fff;
+}
+.topbar a:not(.btn) {
+  color: rgba(255,255,255,.8);
 }
 .topbar-inner {
   display: flex;

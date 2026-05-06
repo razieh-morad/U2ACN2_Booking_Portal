@@ -12,118 +12,96 @@
       background:var(--card-bg); color:var(--text); font-weight:600; font-size:.88rem;
       cursor:pointer; transition:all .15s;
     }
-    .tab-btn.active, .tab-btn:hover {
-      background:var(--accent); color:#fff; border-color:var(--accent);
-    }
+    .tab-btn.active, .tab-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
     .tab-pane { display:none; }
     .tab-pane.active { display:block; }
-
-    /* Table */
     .data-table { width:100%; border-collapse:collapse; font-size:.85rem; }
     .data-table th {
-      text-align:left; padding:.6rem .8rem;
-      background:var(--table-head); color:var(--muted);
-      font-size:.75rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+      text-align:left; padding:.6rem .8rem; background:var(--page-bg); color:var(--muted);
+      font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
       border-bottom:2px solid var(--border);
     }
-    .data-table td {
-      padding:.6rem .8rem; border-bottom:1px solid var(--border);
-      vertical-align:top;
-    }
-    .data-table tr:hover td { background:var(--hover-bg); }
-    .data-table .mono { font-family:'JetBrains Mono',monospace; font-size:.82rem; }
-
-    /* Status badges */
-    .badge {
-      display:inline-block; font-size:.72rem; font-weight:700; letter-spacing:.05em;
-      text-transform:uppercase; padding:.2rem .6rem; border-radius:20px;
-    }
+    .data-table td { padding:.6rem .8rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    .data-table tr:hover td { background:var(--accent-light); }
+    .mono { font-family:'IBM Plex Mono',monospace; font-size:.82rem; }
+    .badge { display:inline-block; font-size:.7rem; font-weight:700; letter-spacing:.05em;
+             text-transform:uppercase; padding:.2rem .6rem; border-radius:20px; white-space:nowrap; }
     .badge-pending   { background:#fff3cd; color:#856404; }
     .badge-approved  { background:#d1e7dd; color:#0f5132; }
     .badge-rejected  { background:#f8d7da; color:#842029; }
     .badge-fulfilled { background:#cfe2ff; color:#084298; }
     .badge-purchased { background:#d1e7dd; color:#0f5132; }
-
-    /* Reserved badge */
-    .badge-reserved { background:#ffc107; color:#1a1200; }
-
-    /* Action buttons */
-    .btn-sm {
-      padding:.3rem .7rem; font-size:.78rem; font-weight:600; border-radius:6px;
-      border:none; cursor:pointer; transition:opacity .15s; text-decoration:none;
-      display:inline-block;
-    }
+    .badge-ordered   { background:#e2d9f3; color:#4a148c; }
+    .badge-reserved  { background:#ffc107; color:#1a1200; }
+    .btn-sm { padding:.3rem .7rem; font-size:.78rem; font-weight:600; border-radius:6px;
+              border:none; cursor:pointer; transition:opacity .15s; display:inline-block; }
     .btn-approve { background:#198754; color:#fff; }
     .btn-reject  { background:#dc3545; color:#fff; }
+    .btn-ordered { background:#6f42c1; color:#fff; }
     .btn-fulfill { background:#0d6efd; color:#fff; }
     .btn-delete  { background:#6c757d; color:#fff; }
     .btn-edit    { background:var(--accent); color:#fff; }
     .btn-sm:hover { opacity:.82; }
-
-    /* Add/Edit form */
-    .add-form .form-grid {
-      display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:.7rem;
-    }
+    .add-form .form-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:.7rem; }
     .add-form .field label { font-size:.8rem; font-weight:600; display:block; margin-bottom:.25rem; }
     .add-form .field input, .add-form .field select {
       width:100%; padding:.5rem .7rem; border:1.5px solid var(--border);
-      border-radius:6px; font-size:.85rem; background:var(--card-bg); color:var(--text);
-      box-sizing:border-box;
+      border-radius:6px; font-size:.85rem; background:var(--card-bg); color:var(--text); box-sizing:border-box;
     }
-    .add-form .field input:focus, .add-form .field select:focus {
-      outline:none; border-color:var(--accent);
-    }
-    .add-form .btn-save {
-      margin-top:.9rem; padding:.6rem 1.6rem; background:var(--accent); color:#fff;
-      border:none; border-radius:8px; font-weight:700; cursor:pointer;
-    }
-
-    /* Reserve modal inline */
-    .reserve-form { display:none; background:var(--hover-bg); padding:.7rem;
-                    border-radius:8px; margin-top:.4rem; }
+    .add-form .btn-save { margin-top:.9rem; padding:.6rem 1.6rem; background:var(--accent); color:#fff;
+                          border:none; border-radius:8px; font-weight:700; cursor:pointer; }
+    .reserve-form { display:none; background:var(--page-bg); padding:.7rem;
+                    border-radius:8px; margin-top:.4rem; border:1px solid var(--border); }
     .reserve-form.open { display:block; }
-    .reserve-form input {
-      padding:.4rem .6rem; border:1px solid var(--border); border-radius:5px;
-      font-size:.83rem; background:var(--card-bg); color:var(--text);
-      margin-bottom:.3rem; width:100%; box-sizing:border-box;
-    }
-    .reserve-form .reserve-btns { display:flex; gap:.4rem; }
-
-    .flash        { padding:.75rem 1rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
+    .reserve-form input { width:100%; padding:.4rem .6rem; border:1px solid var(--border); border-radius:5px;
+                          font-family:inherit; font-size:.82rem; background:var(--card-bg); color:var(--text);
+                          margin-bottom:.3rem; box-sizing:border-box; }
+    .reserve-btns { display:flex; gap:.4rem; }
+    .note-form { display:none; margin-top:.5rem; }
+    .note-form.open { display:block; }
+    .note-form textarea { width:100%; padding:.4rem .6rem; border:1px solid var(--border); border-radius:5px;
+                          font-family:inherit; font-size:.82rem; background:var(--card-bg); color:var(--text);
+                          resize:vertical; min-height:60px; box-sizing:border-box; }
+    .note-form .note-btns { display:flex; gap:.4rem; margin-top:.3rem; }
+    .admin-note-text { font-size:.8rem; color:var(--accent); font-style:italic; margin-top:.2rem; line-height:1.4; }
+    .upload-zone { border:2px dashed var(--border); border-radius:12px; padding:2rem;
+                   text-align:center; background:var(--page-bg); transition:border-color .2s; }
+    .upload-zone:hover { border-color:var(--accent); }
+    .upload-zone input[type=file] { display:none; }
+    .upload-zone label { display:inline-block; padding:.65rem 1.4rem; background:var(--accent);
+                         color:#fff; border-radius:8px; cursor:pointer; font-weight:600; font-size:.9rem; }
+    .upload-zone p { color:var(--muted); font-size:.85rem; margin:.5rem 0 0; }
+    .upload-mode { display:flex; gap:1.5rem; justify-content:center; margin-top:1rem; }
+    .upload-mode label { display:flex; align-items:center; gap:.4rem; font-size:.88rem; cursor:pointer; }
+    .btn-upload { margin-top:1rem; padding:.65rem 1.6rem; background:var(--accent); color:#fff;
+                  border:none; border-radius:8px; font-weight:700; cursor:pointer; font-size:.9rem; }
+    .csv-hint { background:var(--accent-light); border:1px solid var(--border); border-radius:8px;
+                padding:1rem 1.2rem; font-size:.82rem; margin-top:1.2rem; line-height:1.7; }
+    .csv-hint code { background:var(--page-bg); padding:.1rem .4rem; border-radius:4px; font-size:.78rem; }
+    .flash { padding:.75rem 1rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
     .flash.success { background:#d1e7dd; color:#0f5132; border:1px solid #badbcc; }
     .flash.error   { background:#f8d7da; color:#842029; border:1px solid #f5c2c7; }
-
-    .stats-row { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; }
-    .stat-card {
-      flex:1; min-width:120px; background:var(--card-bg); border:1px solid var(--border);
-      border-radius:10px; padding:1rem 1.2rem; text-align:center;
-    }
-    .stat-card .num { font-size:1.8rem; font-weight:800; color:var(--accent); }
-    .stat-card .lbl { font-size:.78rem; color:var(--muted); font-weight:600; }
-
-    .section-heading {
-      font-size:.78rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
-      color:var(--accent); margin:0 0 .8rem;
-    }
+    .stats-row { display:flex; gap:.8rem; flex-wrap:wrap; margin-bottom:1.5rem; }
+    .stat-card { flex:1; min-width:110px; background:var(--card-bg); border:1px solid var(--border);
+                 border-radius:10px; padding:.9rem 1.1rem; text-align:center; }
+    .stat-card .num { font-size:1.7rem; font-weight:800; color:var(--accent); line-height:1.1; }
+    .stat-card .lbl { font-size:.72rem; color:var(--muted); font-weight:600; margin-top:.2rem; }
+    .section-heading { font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+                       color:var(--accent); margin:0 0 .8rem; }
   </style>
 </head>
 <body>
 <header class="topbar">
   <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
     <div>
-      <h1 style="font-size:1.3rem;margin:0;">⚗️ Chemical Inventory Admin</h1>
-      <p class="sub" style="margin:0;">Manage chemicals, requests &amp; purchases</p>
+      <h1 style="font-size:1.3rem;margin:0;color:#fff;">⚗️ Chemical Inventory Admin</h1>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">Manage chemicals, requests &amp; purchases</p>
     </div>
-    <nav style="display:flex;gap:1rem;align-items:center;">
-      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">
-        Public View
-      </a>
-      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">
-        ⬇ Export CSV
-      </a>
-      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">
-        Logout
-      </a>
+    <nav style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.88rem;">Public View</a>
+      <a href="/chemicals/orders" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">Orders Page</a>
+      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">⬇ Export CSV</a>
+      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">Logout</a>
     </nav>
   </div>
 </header>
@@ -136,13 +114,11 @@
     {% endfor %}
   {% endwith %}
 
-  <!-- Stats -->
   {% set pending_chem = chem_requests | selectattr('status','eq','pending') | list | length %}
   {% set pending_purchase = purchase_requests | selectattr('status','eq','pending') | list | length %}
   <div class="stats-row">
     <div class="stat-card">
-      <div class="num">{{ chemicals | length }}</div>
-      <div class="lbl">Chemicals</div>
+      <div class="num">{{ chemicals | length }}</div><div class="lbl">Chemicals</div>
     </div>
     <div class="stat-card">
       <div class="num" style="{% if pending_chem %}color:#e65c00;{% endif %}">{{ pending_chem }}</div>
@@ -158,38 +134,32 @@
     </div>
   </div>
 
-  <!-- Tabs -->
   <div class="admin-tabs">
-    <button class="tab-btn active" onclick="showTab('tab-inventory',this)">
-      Inventory ({{ chemicals | length }})
-    </button>
-    <button class="tab-btn" onclick="showTab('tab-add',this)">Add / Edit Chemical</button>
+    <button class="tab-btn active" onclick="showTab('tab-inventory',this)">Inventory ({{ chemicals|length }})</button>
+    <button class="tab-btn" onclick="showTab('tab-add',this)">Add / Edit</button>
+    <button class="tab-btn" onclick="showTab('tab-upload',this)">📤 Upload CSV</button>
     <button class="tab-btn" onclick="showTab('tab-requests',this)">
-      Chemical Requests {% if pending_chem %}<span style="color:#ffc107;">({{ pending_chem }})</span>{% endif %}
+      Requests {% if pending_chem %}<span style="color:#ffc107;">({{ pending_chem }})</span>{% endif %}
     </button>
     <button class="tab-btn" onclick="showTab('tab-purchases',this)">
-      Purchase Requests {% if pending_purchase %}<span style="color:#ffc107;">({{ pending_purchase }})</span>{% endif %}
+      Purchases {% if pending_purchase %}<span style="color:#ffc107;">({{ pending_purchase }})</span>{% endif %}
     </button>
   </div>
 
-  <!-- ── Tab: Inventory ── -->
+  <!-- ── Inventory ── -->
   <div id="tab-inventory" class="tab-pane active card" style="overflow-x:auto;">
     <p class="section-heading">All Chemicals</p>
     <table class="data-table">
       <thead>
-        <tr>
-          <th>Name</th><th>Formula</th><th>MW</th><th>CAS</th>
-          <th>Supplier</th><th>Amount</th><th>Expiry</th>
-          <th>Storage</th><th>Location</th><th>Reserved</th><th>Actions</th>
-        </tr>
+        <tr><th>Name</th><th>Formula</th><th>MW</th><th>CAS</th><th>Supplier</th>
+            <th>Amount</th><th>Expiry</th><th>Storage</th><th>Location</th><th>Reserved</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for c in chemicals %}
         <tr>
           <td><strong>{{ c.name }}</strong>
             {% if c.notes and c.notes not in ('','---') %}
-            <br/><small style="color:var(--muted);font-style:italic;">{{ c.notes }}</small>
-            {% endif %}
+            <br/><small style="color:var(--muted);font-style:italic;">{{ c.notes }}</small>{% endif %}
           </td>
           <td class="mono">{{ c.formula }}</td>
           <td class="mono">{{ c.mw }}</td>
@@ -206,36 +176,36 @@
             {% else %}—{% endif %}
           </td>
           <td style="white-space:nowrap;">
-            <!-- Reserve toggle -->
             <button class="btn-sm btn-edit" onclick="toggleReserve({{ c.id }})">
-              {% if c.reserved_for %}Edit Reservation{% else %}Reserve{% endif %}
+              {% if c.reserved_for %}Edit Res.{% else %}Reserve{% endif %}
             </button>
             <div class="reserve-form" id="resform-{{ c.id }}">
               <form method="post" action="/admin/chemicals/reserve/{{ c.id }}">
-                <input type="text" name="reserved_for"
-                       value="{{ c.reserved_for }}" placeholder="Email or person name"/>
-                <input type="text" name="reserved_label"
-                       value="{{ c.reserved_label }}" placeholder="Label (e.g. PhD Project X)"/>
+                <input type="text" name="reserved_for" value="{{ c.reserved_for }}" placeholder="Person name / email"/>
+                <input type="text" name="reserved_label" value="{{ c.reserved_label }}" placeholder="Project label"/>
                 <div class="reserve-btns">
                   <button type="submit" class="btn-sm btn-approve">Save</button>
-                  <button type="button" class="btn-sm btn-delete"
-                          onclick="clearReserve({{ c.id }})">Clear</button>
+                  <button type="button" class="btn-sm btn-delete" onclick="clearReserve({{ c.id }})">Clear</button>
                 </div>
               </form>
             </div>
-            <br style="margin:.2rem 0;"/>
             <form method="post" action="/admin/chemicals/delete/{{ c.id }}"
-                  onsubmit="return confirm('Delete {{ c.name }}?');" style="display:inline;">
-              <button type="submit" class="btn-sm btn-delete" style="margin-top:.3rem;">Delete</button>
+                  onsubmit="return confirm('Delete {{ c.name }}?');" style="display:inline;margin-left:.3rem;">
+              <button type="submit" class="btn-sm btn-delete">Delete</button>
             </form>
           </td>
         </tr>
         {% endfor %}
+        {% if not chemicals %}
+        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:2rem;">
+          No chemicals yet — upload a CSV or add one manually.
+        </td></tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
 
-  <!-- ── Tab: Add/Edit ── -->
+  <!-- ── Add/Edit ── -->
   <div id="tab-add" class="tab-pane card add-form">
     <p class="section-heading">Add / Update Chemical (matched by name)</p>
     <form method="post" action="/admin/chemicals/add">
@@ -256,33 +226,58 @@
             <option>Irritant</option><option>Water-React</option>
           </select>
         </div>
-        <div class="field"><label>Location</label><input type="text" name="location" placeholder="Shelf / cabinet"/></div>
-        <div class="field"><label>Reserved For</label><input type="text" name="reserved_for" placeholder="Email or name"/></div>
-        <div class="field"><label>Reserved Label</label><input type="text" name="reserved_label" placeholder="Project name"/></div>
+        <div class="field"><label>Location</label><input type="text" name="location"/></div>
+        <div class="field"><label>Reserved For</label><input type="text" name="reserved_for"/></div>
+        <div class="field"><label>Reserved Label</label><input type="text" name="reserved_label"/></div>
         <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" name="notes"/></div>
       </div>
       <button type="submit" class="btn-save">Save Chemical</button>
     </form>
   </div>
 
-  <!-- ── Tab: Chemical Requests ── -->
+  <!-- ── CSV Upload ── -->
+  <div id="tab-upload" class="tab-pane card">
+    <p class="section-heading">Upload Chemical List from CSV</p>
+    <form method="post" action="/admin/chemicals/csv-upload" enctype="multipart/form-data">
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" name="csv_file" id="csv-file" accept=".csv" onchange="updateFileName(this)"/>
+        <label for="csv-file">Choose CSV File</label>
+        <p id="file-name-display">No file chosen</p>
+        <p style="font-size:.8rem;">or drag &amp; drop here</p>
+      </div>
+      <div class="upload-mode">
+        <label><input type="radio" name="import_mode" value="merge" checked/> Merge — add/update, keep existing</label>
+        <label><input type="radio" name="import_mode" value="replace"/> Replace all — delete everything first</label>
+      </div>
+      <div style="text-align:center;">
+        <button type="submit" class="btn-upload">Import Chemicals</button>
+      </div>
+      <div class="csv-hint">
+        <strong>Expected CSV columns</strong> (header row required, order flexible):<br/><br/>
+        <code>Name</code> &nbsp;<code>Formula</code> &nbsp;<code>MW</code> &nbsp;<code>CAS No</code>
+        &nbsp;<code>Supplier</code> &nbsp;<code>Amount</code> &nbsp;<code>Expiry Date</code>
+        &nbsp;<code>Storage Group</code> &nbsp;<code>Location</code> &nbsp;<code>Notes</code><br/><br/>
+        Variants like <code>Chemical Name</code>, <code>CAS Number</code>, <code>Molecular Formula</code> are recognised.<br/>
+        <strong>Merge:</strong> adds new chemicals and updates existing ones (matched by name).<br/>
+        <strong>Replace all:</strong> deletes the entire inventory and imports fresh from the file.
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Chemical Requests ── -->
   <div id="tab-requests" class="tab-pane card" style="overflow-x:auto;">
     <p class="section-heading">In-Stock Chemical Requests</p>
     {% if chem_requests %}
     <table class="data-table">
       <thead>
-        <tr>
-          <th>#</th><th>Chemical</th><th>Formula</th><th>Requester</th>
-          <th>Email</th><th>Quantity</th><th>Purpose</th>
-          <th>Submitted</th><th>Status</th><th>Actions</th>
-        </tr>
+        <tr><th>#</th><th>Chemical</th><th>Requester</th><th>Email</th>
+            <th>Quantity</th><th>Purpose</th><th>Date</th><th>Status</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for r in chem_requests %}
         <tr>
           <td>{{ r.id }}</td>
-          <td><strong>{{ r.chem_name }}</strong></td>
-          <td class="mono">{{ r.formula }}</td>
+          <td><strong>{{ r.chem_name }}</strong><br/><span class="mono" style="font-size:.78rem;">{{ r.formula }}</span></td>
           <td>{{ r.first_name }} {{ r.surname }}</td>
           <td><a href="mailto:{{ r.requester_email }}">{{ r.requester_email }}</a></td>
           <td>{{ r.quantity }}</td>
@@ -291,21 +286,18 @@
           <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
           <td style="white-space:nowrap;">
             {% if r.status == 'pending' %}
-            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status" style="display:inline;">
               <input type="hidden" name="status" value="approved"/>
               <button type="submit" class="btn-sm btn-approve">Approve</button>
             </form>
-            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status" style="display:inline;">
               <input type="hidden" name="status" value="rejected"/>
               <button type="submit" class="btn-sm btn-reject">Reject</button>
             </form>
             {% elif r.status == 'approved' %}
-            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/request/{{ r.id }}/status" style="display:inline;">
               <input type="hidden" name="status" value="fulfilled"/>
-              <button type="submit" class="btn-sm btn-fulfill">Mark Fulfilled</button>
+              <button type="submit" class="btn-sm btn-fulfill">Fulfilled</button>
             </form>
             {% else %}—{% endif %}
           </td>
@@ -318,48 +310,76 @@
     {% endif %}
   </div>
 
-  <!-- ── Tab: Purchase Requests ── -->
+  <!-- ── Purchase Requests ── -->
   <div id="tab-purchases" class="tab-pane card" style="overflow-x:auto;">
     <p class="section-heading">Purchase Requests</p>
+    <p style="font-size:.83rem;color:var(--muted);margin-bottom:1rem;">
+      Users can track their requests at <a href="/chemicals/orders">/chemicals/orders</a>.
+      Admin notes are visible there too.
+    </p>
     {% if purchase_requests %}
     <table class="data-table">
       <thead>
-        <tr>
-          <th>#</th><th>Material</th><th>Formula</th><th>CAS</th>
-          <th>Specs</th><th>Amount</th><th>Requester</th><th>Email</th>
-          <th>Comments</th><th>Submitted</th><th>Status</th><th>Actions</th>
-        </tr>
+        <tr><th>#</th><th>Material</th><th>CAS</th><th>Amount</th><th>Requester</th>
+            <th>Comments</th><th>Date</th><th>Status</th><th>Admin Note</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for p in purchase_requests %}
         <tr>
           <td>{{ p.id }}</td>
-          <td><strong>{{ p.material_name }}</strong></td>
-          <td class="mono">{{ p.formula or '—' }}</td>
+          <td>
+            <strong>{{ p.material_name }}</strong>
+            {% if p.formula %}<br/><span class="mono" style="font-size:.78rem;">{{ p.formula }}</span>{% endif %}
+            {% if p.specifications %}<br/><small style="color:var(--muted);">{{ p.specifications }}</small>{% endif %}
+          </td>
           <td class="mono">{{ p.cas_number or '—' }}</td>
-          <td style="max-width:180px;white-space:normal;">{{ p.specifications or '—' }}</td>
-          <td>{{ p.amount }} {{ p.unit }}</td>
-          <td>{{ p.requester_first_name }} {{ p.requester_surname }}</td>
-          <td><a href="mailto:{{ p.requester_email }}">{{ p.requester_email }}</a></td>
-          <td style="max-width:160px;white-space:normal;">{{ p.comments or '—' }}</td>
+          <td style="white-space:nowrap;">{{ p.amount }} {{ p.unit }}</td>
+          <td>
+            {{ p.requester_first_name }} {{ p.requester_surname }}<br/>
+            <a href="mailto:{{ p.requester_email }}" style="font-size:.78rem;">{{ p.requester_email }}</a>
+          </td>
+          <td style="max-width:130px;white-space:normal;font-size:.8rem;">{{ p.comments or '—' }}</td>
           <td style="white-space:nowrap;">{{ p.created_at[:10] if p.created_at else '—' }}</td>
           <td><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
+          <td style="min-width:160px;">
+            {% if p.admin_note %}
+            <div class="admin-note-text">{{ p.admin_note }}</div>
+            {% endif %}
+            <button class="btn-sm btn-edit" style="font-size:.72rem;margin-top:.3rem;"
+                    onclick="toggleNote({{ p.id }})">✎ Edit note</button>
+            <div class="note-form" id="note-{{ p.id }}">
+              <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status">
+                <input type="hidden" name="status" value=""/>
+                <textarea name="admin_note" placeholder="e.g. Ordered from Sigma, ETA 2 weeks…">{{ p.admin_note or '' }}</textarea>
+                <div class="note-btns">
+                  <button type="submit" class="btn-sm btn-approve">Save</button>
+                  <button type="button" class="btn-sm btn-delete" onclick="toggleNote({{ p.id }})">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </td>
           <td style="white-space:nowrap;">
             {% if p.status == 'pending' %}
-            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status" style="display:block;margin-bottom:.3rem;">
               <input type="hidden" name="status" value="approved"/>
+              <input type="hidden" name="admin_note" value="{{ p.admin_note or '' }}"/>
               <button type="submit" class="btn-sm btn-approve">Approve</button>
             </form>
-            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status" style="display:block;">
               <input type="hidden" name="status" value="rejected"/>
+              <input type="hidden" name="admin_note" value="{{ p.admin_note or '' }}"/>
               <button type="submit" class="btn-sm btn-reject">Reject</button>
             </form>
             {% elif p.status == 'approved' %}
-            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status"
-                  style="display:inline;">
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status" style="display:block;">
+              <input type="hidden" name="status" value="ordered"/>
+              <input type="hidden" name="admin_note" value="{{ p.admin_note or '' }}"/>
+              <button type="submit" class="btn-sm btn-ordered">Mark Ordered</button>
+            </form>
+            {% elif p.status == 'ordered' %}
+            <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status" style="display:block;">
               <input type="hidden" name="status" value="purchased"/>
+              <input type="hidden" name="admin_note" value="{{ p.admin_note or '' }}"/>
               <button type="submit" class="btn-sm btn-fulfill">Mark Purchased</button>
             </form>
             {% else %}—{% endif %}
@@ -388,19 +408,32 @@ function toggleReserve(id) {
   if (f.classList.contains('open')) f.querySelector('input').focus();
 }
 function clearReserve(id) {
-  const f = document.getElementById('resform-' + id);
-  f.querySelectorAll('input').forEach(i => i.value = '');
-  f.querySelector('form').submit();
+  document.getElementById('resform-' + id).querySelectorAll('input').forEach(i => i.value = '');
+  document.getElementById('resform-' + id).querySelector('form').submit();
 }
-// Auto-open pending tab if there are pending items
-window.addEventListener('DOMContentLoaded', () => {
-  const url = new URL(window.location);
-  const tab = url.searchParams.get('tab');
-  if (tab) {
-    const btn = document.querySelector(`[onclick*="${tab}"]`);
-    if (btn) btn.click();
-  }
-});
+function toggleNote(id) {
+  const f = document.getElementById('note-' + id);
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) f.querySelector('textarea').focus();
+}
+function updateFileName(input) {
+  document.getElementById('file-name-display').textContent =
+    input.files[0] ? input.files[0].name : 'No file chosen';
+}
+const dropZone = document.getElementById('drop-zone');
+if (dropZone) {
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor='var(--accent)'; });
+  dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor=''; });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.style.borderColor='';
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.csv')) {
+      const dt = new DataTransfer(); dt.items.add(file);
+      document.getElementById('csv-file').files = dt.files;
+      document.getElementById('file-name-display').textContent = file.name;
+    }
+  });
+}
 </script>
 </body>
 </html>

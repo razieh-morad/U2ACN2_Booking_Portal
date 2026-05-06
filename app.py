@@ -346,11 +346,7 @@ def init_db():
         conn.commit()
         conn.close()
     _db_initialized = True
-    try:
-        _seed_chemicals()
-    except Exception as _seed_err:
-        import sys
-        print(f"[WARNING] Chemical seed failed: {_seed_err}", file=sys.stderr)
+    # Chemicals are managed via CSV upload — no seed needed
 
 # ================================================ Chemical DB helpers =======
 
