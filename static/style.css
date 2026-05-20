@@ -416,6 +416,28 @@ a:hover { text-decoration: underline; }
 .picker-slot-taken { opacity: .4; cursor: not-allowed; background: var(--page-bg); }
 .picker-slot-taken:hover { border-color: var(--border); background: var(--page-bg); }
 
+/* Pending booking state */
+.picker-slot-pending {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  cursor: not-allowed;
+  opacity: .9;
+}
+.picker-slot-pending:hover {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+}
+
+.slot-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--warn-text);
+  background: transparent;
+  margin-left: 0.3rem;
+  padding: 0;
+}
+
 .booking-form { position: sticky; top: 76px; }
 
 /* ── Data table ── */
@@ -462,6 +484,34 @@ a:hover { text-decoration: underline; }
 @media (max-width: 800px) { .booking-detail-grid { grid-template-columns: 1fr; } }
 .admin-actions { display: flex; flex-direction: column; gap: 1rem; }
 .action-card { /* uses .card */ }
+
+/* Horizontal tabs for admin actions */
+.admin-actions-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.action-tab {
+  padding: 1.2rem;
+  background: var(--accent-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.action-tab .tab-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 1rem;
+  margin-top: 0;
+}
+
+.action-tab .field { margin-bottom: 1rem; }
+.action-tab .field label { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.4rem; display: block; }
+.action-tab textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'IBM Plex Sans'; font-size: 0.85rem; resize: vertical; }
+.action-tab .btn-full { margin-top: 0.5rem; }
 
 .detail-list { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; font-size: .88rem; }
 .detail-list dt { color: var(--muted); font-weight: 600; font-size: .8rem; white-space: nowrap; padding-top: .1rem; }

@@ -1004,6 +1004,32 @@ def db_list_bookings_range_minimal(lab_slug: str, start_d: date, end_d: date) ->
         conn.close()
         return [dict(r) for r in rows]
 
+def db_list_pending_bookings_range(lab_slug: str, start_d: date, end_d: date) -> List[Dict]:
+    """Get pending bookings for a lab in a date range (for availability display)."""
+    init_db()
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT booking_date,start_time,end_time FROM bookings "
+                    "WHERE lab_slug=%s AND booking_date>=%s::date AND booking_date<=%s::date "
+                    "AND status='pending' AND cancelled_at IS NULL",
+                    (lab_slug, start_d.isoformat(), end_d.isoformat()))
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH); conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT booking_date,start_time,end_time FROM bookings "
+            "WHERE lab_slug=? AND booking_date>=? AND booking_date<=? "
+            "AND status='pending' AND (cancelled_at IS NULL OR cancelled_at='')",
+            (lab_slug, start_d.isoformat(), end_d.isoformat())).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
 def is_slot_free(bookings: List[Dict], d: date, s: time, e: time) -> bool:
     for b in bookings:
         if normalize_booking_date(b["booking_date"]) != d: continue
@@ -1011,9 +1037,18 @@ def is_slot_free(bookings: List[Dict], d: date, s: time, e: time) -> bool:
             return False
     return True
 
+def has_pending_booking(pending_bookings: List[Dict], d: date, s: time, e: time) -> bool:
+    """Check if a slot has a pending booking."""
+    for b in pending_bookings:
+        if normalize_booking_date(b["booking_date"]) != d: continue
+        if overlaps(s, e, normalize_booking_time(b["start_time"]), normalize_booking_time(b["end_time"])):
+            return True
+    return False
+
 def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
     start_d, end_d = next_two_weeks_window()
     bookings = db_list_bookings_range_minimal(lab_slug, start_d, end_d)
+    pending_bookings = db_list_pending_bookings_range(lab_slug, start_d, end_d)
     now = datetime.now(TZ)
     min_notice = LABS.get(lab_slug, {}).get("min_notice_hours", 0)
     days: List[Dict[str, Any]] = []
@@ -1024,8 +1059,9 @@ def availability_days(lab_slug: str) -> List[Dict[str, Any]]:
             if free and min_notice:
                 slot_dt = datetime.combine(d, s).replace(tzinfo=TZ)
                 if slot_dt < now + timedelta(hours=min_notice): free = False
+            pending = has_pending_booking(pending_bookings, d, s, e)
             slots.append({"date": d.isoformat(), "start": s.strftime("%H:%M"),
-                          "end": e.strftime("%H:%M"), "free": free,
+                          "end": e.strftime("%H:%M"), "free": free, "pending": pending,
                           "value": f"{d.isoformat()}|{s.strftime('%H:%M')}|{e.strftime('%H:%M')}"})
         days.append({"date": d, "slots": slots})
     return days
