@@ -881,8 +881,11 @@ def iter_workdays(start_d: date, end_d: date):
         d += timedelta(days=1)
 
 def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
-    if lab_slug == "furnace":
+    # Oven labs (furnace, manual-drying-oven, automated-drying-oven) have 2 fixed slots
+    oven_labs = ["furnace", "manual-drying-oven", "automated-drying-oven"]
+    if lab_slug in oven_labs:
         return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
+    # All other labs use dynamic slot generation
     slots: List[Tuple[time, time]] = []
     cur = datetime.combine(d, WORKDAY_START)
     end = datetime.combine(d, WORKDAY_END)
@@ -1352,8 +1355,13 @@ def collect_selected_slots() -> List[Tuple[str, str, str]]:
             slots.append((d, s, e))
     return sorted(list({x for x in slots}))
 
-def is_valid_furnace_block(s: str, e: str) -> bool:
+def is_valid_oven_block(s: str, e: str) -> bool:
+    """Validate that slot is 08:00-12:00 or 12:00-16:00 for oven labs."""
     return (s, e) in (("08:00","12:00"),("12:00","16:00"))
+
+def is_valid_furnace_block(s: str, e: str) -> bool:
+    """Deprecated: use is_valid_oven_block instead. Kept for backwards compatibility."""
+    return is_valid_oven_block(s, e)
 
 def db_mark_reminder_sent(booking_id: int) -> None:
     init_db()
@@ -1725,6 +1733,11 @@ def admin_logout():
 
 @app.get("/admin")
 def admin_portal():
+    # Require login to access admin portal
+    if not session.get("is_admin"):
+        return redirect(url_for("admin_login_lab", lab_slug="furnace",
+                               next=url_for("admin_portal")))
+
     pending = db_pending_counts()
     order = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
     labs = []
@@ -1744,9 +1757,11 @@ def admin_lab(lab_slug: str):
     if lab_slug not in LABS: abort(404)
     redir = require_admin(lab_slug)
     if redir: return redir
+    # Only show all bookings (including pending) to authorized admin
+    all_bookings = db_list_bookings(lab_slug)
     return render_template("admin.html", lab_slug=lab_slug,
                            lab_title=LABS[lab_slug]["title"],
-                           bookings=db_list_bookings(lab_slug),
+                           bookings=all_bookings,
                            admin_username=session.get("admin_username",""))
 
 @app.route("/admin/<lab_slug>/booking/<int:booking_id>", methods=["GET","POST"])
@@ -1811,6 +1826,12 @@ def lab_generic(lab_slug: str):
         user_name  = (request.form.get("user_name") or "").strip()
         user_email = (request.form.get("user_email") or "").strip()
         notes      = (request.form.get("notes") or "").strip()
+        # Validate oven labs have valid time slots
+        oven_labs = ["manual-drying-oven", "automated-drying-oven"]
+        if lab_slug in oven_labs:
+            for d, s, e in slots:
+                if not is_valid_oven_block(s, e):
+                    errors.append(f"Invalid slot for {lab['title']}: {s}–{e}. Only 08:00-12:00 and 12:00-16:00 are available.")
         if not user_name:  errors.append("Name is required.")
         if not user_email or "@" not in user_email: errors.append("Valid email required.")
         if not slots: errors.append("Select at least one slot.")
