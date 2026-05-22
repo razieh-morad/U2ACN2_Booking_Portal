@@ -43,7 +43,20 @@
           </td>
           <td>{{ b.created_at[:10] if b.created_at else '—' }}</td>
           <td>
-            <a href="/admin/{{ lab_slug }}/booking/{{ b.id }}" class="btn btn-sm btn-ghost">Review</a>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              {% if b.status == 'pending' %}
+              <form method="post" action="/admin/{{ lab_slug }}/booking/{{ b.id }}" style="display:inline;" onsubmit="return confirm('Approve booking #{{ b.id }} for {{ b.user_name }}?');">
+                <input type="hidden" name="action" value="approve"/>
+                <button type="submit" class="btn btn-sm btn-success">Approve</button>
+              </form>
+              <form method="post" action="/admin/{{ lab_slug }}/booking/{{ b.id }}" style="display:inline;" class="reject-form" data-name="{{ b.user_name }}" data-id="{{ b.id }}">
+                <input type="hidden" name="action" value="reject"/>
+                <input type="hidden" name="rejection_reason" class="reject-reason-hidden" value=""/>
+                <button type="submit" class="btn btn-sm btn-danger">Decline</button>
+              </form>
+              {% endif %}
+              <a href="/admin/{{ lab_slug }}/booking/{{ b.id }}" class="btn btn-sm btn-ghost">Review</a>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -57,4 +70,29 @@
   </div>
 
 </main>
+
+{% include '_reject_modal.html' %}
+<script>
+let _activeRejectForm = null;
+document.querySelectorAll('.reject-form').forEach(function(form) {
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    _activeRejectForm = form;
+    document.getElementById('reject-modal-label').textContent = 'Declining booking for: ' + form.dataset.name;
+    document.getElementById('reject-modal-reason').value = '';
+    document.getElementById('reject-modal').style.display = 'flex';
+  });
+});
+document.getElementById('reject-modal-confirm').addEventListener('click', function() {
+  if (_activeRejectForm) {
+    _activeRejectForm.querySelector('.reject-reason-hidden').value = document.getElementById('reject-modal-reason').value;
+    document.getElementById('reject-modal').style.display = 'none';
+    _activeRejectForm.submit();
+  }
+});
+document.getElementById('reject-modal-cancel').addEventListener('click', function() {
+  document.getElementById('reject-modal').style.display = 'none';
+  _activeRejectForm = null;
+});
+</script>
 {% endblock %}
