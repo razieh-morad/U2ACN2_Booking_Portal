@@ -864,9 +864,17 @@ a:hover { text-decoration: underline; }
   .field-group, .form-row { grid-template-columns: 1fr; }
   .avail-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   .hero-title { font-size: 1.4rem; }
+  .hero-sub   { font-size: .88rem; }
   .labs-grid  { grid-template-columns: 1fr; }
   .chem-grid  { grid-template-columns: 1fr; }
   .stats-row  { flex-direction: column; }
+  .chem-meta  { grid-template-columns: 1fr; }
+  .admin-actions-tabs { grid-template-columns: 1fr; }
+  .booking-form { position: static; top: auto; }
+  .search-bar { flex-direction: column; }
+  .search-bar button, .search-clear { width: 100%; box-sizing: border-box; }
+  .chem-nav-card { flex-wrap: wrap; }
+  .page-header h1 { font-size: 1.3rem; }
 }
 
 /* ── Admin table → card stack on mobile ── */

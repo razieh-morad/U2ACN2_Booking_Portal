@@ -88,20 +88,38 @@
     .stat-card .lbl { font-size:.72rem; color:var(--muted); font-weight:600; margin-top:.2rem; }
     .section-heading { font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
                        color:var(--accent); margin:0 0 .8rem; }
+
+    @media (max-width: 600px) {
+      .add-form .form-grid { grid-template-columns: 1fr; }
+      .upload-mode  { flex-direction: column; align-items: flex-start; gap: .5rem; }
+      .stats-row    { flex-direction: column; }
+      .tab-btn      { font-size: .82rem; padding: .45rem .85rem; }
+    }
+    @media (max-width: 700px) {
+      .data-table thead { display: none; }
+      .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
+      .data-table tr { border: 1px solid var(--border); border-radius: 12px; margin-bottom: .85rem; padding: .25rem .75rem; background: var(--card-bg); }
+      .data-table td { display: flex; justify-content: space-between; align-items: flex-start; padding: .45rem 0; border-bottom: 1px solid var(--border); gap: 1rem; font-size: .85rem; white-space: normal; }
+      .data-table td:last-child { border-bottom: none; }
+      .data-table td::before { content: attr(data-label); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; min-width: 68px; flex-shrink: 0; padding-top: .15rem; }
+      .data-table td[data-label="Actions"],
+      .data-table td[data-label="Admin Note"],
+      .data-table td[data-label="Reserved"] { flex-direction: column; align-items: flex-start; gap: .4rem; }
+    }
   </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding-top:.5rem;padding-bottom:.5rem;">
     <div>
-      <h1 style="font-size:1.3rem;margin:0;color:#fff;">⚗️ Chemical Inventory Admin</h1>
-      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">Manage chemicals, requests &amp; purchases</p>
+      <h1 style="font-size:1.2rem;margin:0;color:#fff;">⚗️ Chemical Inventory Admin</h1>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);font-size:.78rem;">Manage chemicals, requests &amp; purchases</p>
     </div>
-    <nav style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.88rem;">Public View</a>
-      <a href="/chemicals/orders" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">Orders Page</a>
-      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">⬇ Export CSV</a>
-      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">Logout</a>
+    <nav style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.85rem;">Public View</a>
+      <a href="/chemicals/orders" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.82rem;">Orders</a>
+      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.82rem;">⬇ CSV</a>
+      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.8rem;">Logout</a>
     </nav>
   </div>
 </header>
@@ -157,25 +175,25 @@
       <tbody>
         {% for c in chemicals %}
         <tr>
-          <td><strong>{{ c.name }}</strong>
+          <td data-label="Name"><strong>{{ c.name }}</strong>
             {% if c.notes and c.notes not in ('','---') %}
             <br/><small style="color:var(--muted);font-style:italic;">{{ c.notes }}</small>{% endif %}
           </td>
-          <td class="mono">{{ c.formula }}</td>
-          <td class="mono">{{ c.mw }}</td>
-          <td class="mono">{{ c.cas_no }}</td>
-          <td>{{ c.supplier }}</td>
-          <td>{{ c.amount }}</td>
-          <td>{{ c.expiry_date }}</td>
-          <td>{{ c.storage_group }}</td>
-          <td>{{ c.location }}</td>
-          <td>
+          <td data-label="Formula" class="mono">{{ c.formula }}</td>
+          <td data-label="MW" class="mono">{{ c.mw }}</td>
+          <td data-label="CAS" class="mono">{{ c.cas_no }}</td>
+          <td data-label="Supplier">{{ c.supplier }}</td>
+          <td data-label="Amount">{{ c.amount }}</td>
+          <td data-label="Expiry">{{ c.expiry_date }}</td>
+          <td data-label="Storage">{{ c.storage_group }}</td>
+          <td data-label="Location">{{ c.location }}</td>
+          <td data-label="Reserved">
             {% if c.reserved_for %}
               <span class="badge badge-reserved">{{ c.reserved_label or c.reserved_for }}</span>
               <br/><small style="color:var(--muted);">{{ c.reserved_for }}</small>
             {% else %}—{% endif %}
           </td>
-          <td style="white-space:nowrap;">
+          <td data-label="Actions">
             <button class="btn-sm btn-edit" onclick="toggleReserve({{ c.id }})">
               {% if c.reserved_for %}Edit Res.{% else %}Reserve{% endif %}
             </button>
@@ -276,15 +294,15 @@
       <tbody>
         {% for r in chem_requests %}
         <tr>
-          <td>{{ r.id }}</td>
-          <td><strong>{{ r.chem_name }}</strong><br/><span class="mono" style="font-size:.78rem;">{{ r.formula }}</span></td>
-          <td>{{ r.first_name }} {{ r.surname }}</td>
-          <td><a href="mailto:{{ r.requester_email }}">{{ r.requester_email }}</a></td>
-          <td>{{ r.quantity }}</td>
-          <td>{{ r.purpose or '—' }}</td>
-          <td style="white-space:nowrap;">{{ r.created_at[:10] if r.created_at else '—' }}</td>
-          <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
-          <td style="white-space:nowrap;">
+          <td data-label="#">{{ r.id }}</td>
+          <td data-label="Chemical"><strong>{{ r.chem_name }}</strong><br/><span class="mono" style="font-size:.78rem;">{{ r.formula }}</span></td>
+          <td data-label="Requester">{{ r.first_name }} {{ r.surname }}</td>
+          <td data-label="Email"><a href="mailto:{{ r.requester_email }}">{{ r.requester_email }}</a></td>
+          <td data-label="Quantity">{{ r.quantity }}</td>
+          <td data-label="Purpose">{{ r.purpose or '—' }}</td>
+          <td data-label="Date">{{ r.created_at[:10] if r.created_at else '—' }}</td>
+          <td data-label="Status"><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+          <td data-label="Actions">
             {% if r.status == 'pending' %}
             <form method="post" action="/admin/chemicals/request/{{ r.id }}/status" style="display:inline;">
               <input type="hidden" name="status" value="approved"/>
@@ -326,22 +344,22 @@
       <tbody>
         {% for p in purchase_requests %}
         <tr>
-          <td>{{ p.id }}</td>
-          <td>
+          <td data-label="#">{{ p.id }}</td>
+          <td data-label="Material">
             <strong>{{ p.material_name }}</strong>
             {% if p.formula %}<br/><span class="mono" style="font-size:.78rem;">{{ p.formula }}</span>{% endif %}
             {% if p.specifications %}<br/><small style="color:var(--muted);">{{ p.specifications }}</small>{% endif %}
           </td>
-          <td class="mono">{{ p.cas_number or '—' }}</td>
-          <td style="white-space:nowrap;">{{ p.amount }} {{ p.unit }}</td>
-          <td>
+          <td data-label="CAS" class="mono">{{ p.cas_number or '—' }}</td>
+          <td data-label="Amount">{{ p.amount }} {{ p.unit }}</td>
+          <td data-label="Requester">
             {{ p.requester_first_name }} {{ p.requester_surname }}<br/>
             <a href="mailto:{{ p.requester_email }}" style="font-size:.78rem;">{{ p.requester_email }}</a>
           </td>
-          <td style="max-width:130px;white-space:normal;font-size:.8rem;">{{ p.comments or '—' }}</td>
-          <td style="white-space:nowrap;">{{ p.created_at[:10] if p.created_at else '—' }}</td>
-          <td><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
-          <td style="min-width:160px;">
+          <td data-label="Comments" style="font-size:.8rem;">{{ p.comments or '—' }}</td>
+          <td data-label="Date">{{ p.created_at[:10] if p.created_at else '—' }}</td>
+          <td data-label="Status"><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
+          <td data-label="Admin Note">
             {% if p.admin_note %}
             <div class="admin-note-text">{{ p.admin_note }}</div>
             {% endif %}
@@ -358,7 +376,7 @@
               </form>
             </div>
           </td>
-          <td style="white-space:nowrap;">
+          <td data-label="Actions">
             {% if p.status == 'pending' %}
             <form method="post" action="/admin/chemicals/purchase/{{ p.id }}/status" style="display:block;margin-bottom:.3rem;">
               <input type="hidden" name="status" value="approved"/>

@@ -152,19 +152,28 @@
     .flash { padding:.8rem 1.2rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
     .flash.success { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
     .flash.error   { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a; }
+
+    @media (max-width: 600px) {
+      .chem-hero h1  { font-size: 1.4rem; }
+      .chem-grid     { grid-template-columns: 1fr; }
+      .chem-meta     { grid-template-columns: 1fr; }
+      .search-bar    { flex-direction: column; }
+      .search-bar button { width: 100%; }
+      .request-form-panel .form-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding-top:.5rem;padding-bottom:.5rem;">
     <div>
       <h1 style="font-size:1.3rem;margin:0;color:#fff;">🧪 Chemical Inventory</h1>
-      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">U2ACN2 Nanolab — search, request, or purchase chemicals</p>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);font-size:.82rem;">U2ACN2 Nanolab</p>
     </div>
-    <nav style="display:flex;gap:1rem;align-items:center;">
-      <a href="/" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">← Home</a>
-      <a href="/chemicals/orders" style="color:rgba(255,255,255,.75);text-decoration:none;font-size:.88rem;">📋 Orders</a>
-      <a href="/admin/chemicals" style="color:rgba(255,255,255,.65);text-decoration:none;font-size:.85rem;">Admin</a>
+    <nav style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+      <a href="/" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.88rem;">← Home</a>
+      <a href="/chemicals/orders" style="color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;">📋 Orders</a>
+      <a href="/admin/chemicals" style="color:rgba(255,255,255,.65);text-decoration:none;font-size:.82rem;">Admin</a>
     </nav>
   </div>
 </header>

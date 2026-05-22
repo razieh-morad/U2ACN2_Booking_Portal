@@ -57,16 +57,22 @@
     .error-list { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a;
                   border-radius:8px; padding:.8rem 1.2rem; margin-bottom:1rem; }
     .error-list li { font-size:.88rem; }
+
+    @media (max-width: 600px) {
+      .form-row   { grid-template-columns: 1fr; }
+      .form-row-3 { grid-template-columns: 1fr; }
+      .purchase-hero h1 { font-size: 1.3rem; }
+    }
   </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding-top:.5rem;padding-bottom:.5rem;">
     <div>
-      <h1 style="font-size:1.3rem;margin:0;color:#fff;">🛒 Purchase Request</h1>
-      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">Request a new chemical for the Nanolab inventory</p>
+      <h1 style="font-size:1.2rem;margin:0;color:#fff;">🛒 Purchase Request</h1>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);font-size:.8rem;">Request a new chemical for the Nanolab inventory</p>
     </div>
-    <a href="/chemicals" style="color:rgba(255,255,255,.85);text-decoration:none;font-size:.9rem;">
+    <a href="/chemicals" style="color:rgba(255,255,255,.85);text-decoration:none;font-size:.88rem;">
       ← Back to Inventory
     </a>
   </div>

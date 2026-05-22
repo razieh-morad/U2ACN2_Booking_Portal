@@ -57,6 +57,19 @@
               background:var(--card-bg); border:1px solid var(--border);
               border-radius:10px; padding:.85rem 1.2rem; }
     .legend-item { display:flex; align-items:center; gap:.5rem; font-size:.82rem; }
+
+    @media (max-width: 700px) {
+      .legend { gap: .5rem; }
+      .legend-item { font-size: .78rem; }
+      .orders-table thead { display: none; }
+      .orders-table, .orders-table tbody, .orders-table tr, .orders-table td { display: block; width: 100%; }
+      .orders-table tr { border: 1px solid var(--border); border-radius: 12px; margin-bottom: .85rem; padding: .25rem .75rem; background: var(--card-bg); }
+      .orders-table td { display: flex; justify-content: space-between; align-items: flex-start; padding: .45rem 0; border-bottom: 1px solid var(--border); gap: 1rem; font-size: .85rem; white-space: normal; min-width: 0; }
+      .orders-table td:last-child { border-bottom: none; }
+      .orders-table td::before { content: attr(data-label); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; min-width: 72px; flex-shrink: 0; padding-top: .15rem; }
+      .orders-table td[data-label="Material"],
+      .orders-table td[data-label="Lab Note"] { flex-direction: column; align-items: flex-start; gap: .4rem; }
+    }
   </style>
 
   <!-- Status legend -->
@@ -86,33 +99,33 @@
       <tbody>
         {% for o in orders %}
         <tr>
-          <td style="color:var(--muted);font-size:.8rem;">#{{ o.id }}</td>
-          <td>
+          <td data-label="#" style="color:var(--muted);font-size:.8rem;">#{{ o.id }}</td>
+          <td data-label="Material">
             <strong>{{ o.material_name }}</strong>
             {% if o.specifications %}
             <br/><small style="color:var(--muted);">{{ o.specifications }}</small>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Formula/CAS">
             {% if o.formula %}<div class="mono">{{ o.formula }}</div>{% endif %}
             {% if o.cas_number and o.cas_number not in ('','---') %}
             <div style="font-size:.78rem;color:var(--muted);">CAS: {{ o.cas_number }}</div>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;">{{ o.amount }} {{ o.unit }}</td>
-          <td>
+          <td data-label="Amount">{{ o.amount }} {{ o.unit }}</td>
+          <td data-label="Requester">
             {{ o.requester_first_name }} {{ o.requester_surname }}
             {% if o.comments %}
             <br/><small style="color:var(--muted);font-style:italic;">{{ o.comments }}</small>
             {% endif %}
           </td>
-          <td style="white-space:nowrap;color:var(--muted);font-size:.82rem;">
+          <td data-label="Date" style="color:var(--muted);font-size:.82rem;">
             {{ o.created_at[:10] if o.created_at else '—' }}
           </td>
-          <td>
+          <td data-label="Status">
             <span class="status-pill pill-{{ o.status }}">{{ o.status }}</span>
           </td>
-          <td style="min-width:180px;">
+          <td data-label="Lab Note">
             {% if o.admin_note %}
             <div class="admin-note-box">
               <div class="admin-note-label">Lab note</div>
