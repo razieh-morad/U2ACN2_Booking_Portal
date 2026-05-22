@@ -32,17 +32,17 @@
       <tbody>
         {% for b in bookings %}
         <tr>
-          <td>{{ b.id }}</td>
-          <td>{{ b.user_name }}</td>
-          <td><a href="mailto:{{ b.user_email }}">{{ b.user_email }}</a></td>
-          <td>{{ b.booking_date }}</td>
-          <td>{{ b.start_time[:5] }}</td>
-          <td>{{ b.end_time[:5] }}</td>
-          <td>
+          <td data-label="#">{{ b.id }}</td>
+          <td data-label="Name">{{ b.user_name }}</td>
+          <td data-label="Email"><a href="mailto:{{ b.user_email }}">{{ b.user_email }}</a></td>
+          <td data-label="Date">{{ b.booking_date }}</td>
+          <td data-label="Start">{{ b.start_time[:5] }}</td>
+          <td data-label="End">{{ b.end_time[:5] }}</td>
+          <td data-label="Status">
             <span class="status-badge status-{{ b.status }}">{{ b.status }}</span>
           </td>
-          <td>{{ b.created_at[:10] if b.created_at else '—' }}</td>
-          <td>
+          <td data-label="Submitted">{{ b.created_at[:10] if b.created_at else '—' }}</td>
+          <td data-label="Actions">
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {% if b.status == 'pending' %}
               <form method="post" action="/admin/{{ lab_slug }}/booking/{{ b.id }}" style="display:inline;" onsubmit="return confirm('Approve booking #{{ b.id }} for {{ b.user_name }}?');">
