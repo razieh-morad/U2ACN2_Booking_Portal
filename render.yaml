@@ -12,6 +12,11 @@ services:
       - key: SLOT_MINUTES
         value: "60"
 
+      # Shared secret guarding the scheduled /reminders/* endpoints.
+      # The cron jobs below read the same value via fromService.
+      - key: CRON_SECRET
+        generateValue: true
+
       # ── SMTP (fill in on Render dashboard) ──
       - key: SMTP_HOST
         value: ""
@@ -35,8 +40,76 @@ services:
         value: ""
 
       # ── Per-lab admin credentials ──
-      # Replace LABSLUG with: FURNACE, XPS, MANUAL_DRYING_OVEN, etc.
+      # Each lab has its OWN username + password. Set them all on the Render
+      # dashboard (or here). Pattern: ADMIN_<LABSLUG>_USERNAME / _PASSWORD,
+      # where <LABSLUG> is the lab slug upper-cased with hyphens -> underscores.
+      #
+      #   Carbolite Furnace ............... ADMIN_FURNACE_USERNAME / _PASSWORD
+      #   XPS ............................. ADMIN_XPS_USERNAME / _PASSWORD
+      #   Manual Drying Oven .............. ADMIN_MANUAL_DRYING_OVEN_USERNAME / _PASSWORD
+      #   Automated Drying Oven Series2000  ADMIN_AUTOMATED_DRYING_OVEN_USERNAME / _PASSWORD
+      #   Automated Drying Oven Infitek ... ADMIN_AUTOMATED_DRYING_OVEN_INFITEK_USERNAME / _PASSWORD
+      #   Lenton Elite Furnace ............ ADMIN_LENTON_ELITE_FURNACE_USERNAME / _PASSWORD
+      #   Sputtering ...................... ADMIN_SPUTTERING_USERNAME / _PASSWORD
+      #   Auto Lab ........................ ADMIN_AUTO_LAB_USERNAME / _PASSWORD
+      #   UV-VIS Carry 500 ................ ADMIN_UV_VIS_CURRIE_500_USERNAME / _PASSWORD
+      #   Ocean Optics UV-VIS ............. ADMIN_OCEAN_OPTICS_UV_VIS_USERNAME / _PASSWORD
+      #   Centrifuge ...................... ADMIN_CENTRIFUGE_USERNAME / _PASSWORD
+      #   Pelletizer ...................... ADMIN_PELLETIZER_USERNAME / _PASSWORD
+      #   Thermal Conductivity System ..... ADMIN_THERMAL_CONDUCTIVITY_SYSTEM_USERNAME / _PASSWORD
+      #   Freeze Dryer .................... ADMIN_FREEZE_DRYER_USERNAME / _PASSWORD
+      #   Spin Coater ..................... ADMIN_SPIN_COATER_USERNAME / _PASSWORD
+      #   Hot Plate (Orange) .............. ADMIN_HOT_PLATE_ORANGE_USERNAME / _PASSWORD
+      #   Hot Plate (White) ............... ADMIN_HOT_PLATE_WHITE_USERNAME / _PASSWORD
+      #   Electrospinning ................. ADMIN_ELECTROSPINNING_USERNAME / _PASSWORD
+      #   Rotary Evaporator ............... ADMIN_ROTARY_EVAPORATOR_USERNAME / _PASSWORD
+      #
       # - key: ADMIN_FURNACE_USERNAME
       #   value: admin
       # - key: ADMIN_FURNACE_PASSWORD
       #   value: changeme
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Scheduled job: Friday cleaning-duty reminder.
+  #  Runs every THURSDAY at 08:00 SAST (06:00 UTC) and emails everyone who
+  #  booked a lab this week. Cron is in UTC; 4 = Thursday.
+  # ──────────────────────────────────────────────────────────────────────
+  - type: cron
+    name: u2acn2-thursday-cleaning
+    runtime: python
+    schedule: "0 6 * * 4"
+    buildCommand: "true"
+    startCommand: 'curl -fsS "https://$APP_HOST/reminders/thursday-cleaning?token=$CRON_SECRET"'
+    envVars:
+      - key: APP_HOST
+        fromService:
+          type: web
+          name: u2acn2-nanolab-portal
+          property: host
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: u2acn2-nanolab-portal
+          envVarKey: CRON_SECRET
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Scheduled job: next-day booking reminders. Runs daily at 16:00 SAST
+  #  (14:00 UTC) and emails users whose approved booking is tomorrow.
+  # ──────────────────────────────────────────────────────────────────────
+  - type: cron
+    name: u2acn2-daily-reminders
+    runtime: python
+    schedule: "0 14 * * *"
+    buildCommand: "true"
+    startCommand: 'curl -fsS "https://$APP_HOST/reminders/send?token=$CRON_SECRET"'
+    envVars:
+      - key: APP_HOST
+        fromService:
+          type: web
+          name: u2acn2-nanolab-portal
+          property: host
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: u2acn2-nanolab-portal
+          envVarKey: CRON_SECRET

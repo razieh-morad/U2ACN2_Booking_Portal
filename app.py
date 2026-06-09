@@ -46,8 +46,8 @@ _db_initialized = False
 
 LABS: Dict[str, Dict[str, Any]] = {
     "furnace": {
-        "title": "Nanomaterials Furnace (Carbonate Furnace)",
-        "subtitle": "Carbonate Furnace",
+        "title": "Carbolite Furnace",
+        "subtitle": "High-temperature sintering / annealing",
         "min_notice_hours": 24,
         "max_days_ahead": 30,
         "max_duration_hours": 4,
@@ -59,16 +59,23 @@ LABS: Dict[str, Dict[str, Any]] = {
         "max_days_ahead": 30,
         "max_duration_hours": 8,
     },
-    "manual-drying-oven":    {"title": "Manual drying oven",          "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "automated-drying-oven": {"title": "Automated drying oven",       "subtitle": "Drying",               "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "sputtering":            {"title": "Sputtering",                   "subtitle": "Thin films / coatings","min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "auto-lab":              {"title": "Auto lab",                     "subtitle": "Automated workflows",  "min_notice_hours": 4,  "max_days_ahead": 30, "max_duration_hours": 8},
-    "uv-vis-currie-500":     {"title": "UV-Vis Currie 500",            "subtitle": "Optical spectroscopy", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "centrifuge":            {"title": "Centrifuge",                   "subtitle": "Sample separation",    "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "pelletizer":            {"title": "Pelletizer",                   "subtitle": "Pellet pressing",      "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
-    "thermal-conductivity-system": {"title": "Thermal conductivity system", "subtitle": "Thermal transport", "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "freeze-dryer":          {"title": "Freeze dryer",                 "subtitle": "Lyophilization",       "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
-    "spin-coater":           {"title": "Spin coater",                  "subtitle": "Thin film deposition", "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "manual-drying-oven":             {"title": "Manual Drying Oven",                  "subtitle": "Drying",                    "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "automated-drying-oven":          {"title": "Automated Drying Oven – Series 2000", "subtitle": "Automated drying",          "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "automated-drying-oven-infitek":  {"title": "Automated Drying Oven – Infitek",     "subtitle": "Automated drying",          "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "lenton-elite-furnace":           {"title": "Lenton Elite Furnace",                "subtitle": "High-temperature furnace",  "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 4},
+    "sputtering":                     {"title": "Sputtering",                          "subtitle": "Thin films / coatings",     "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "auto-lab":                       {"title": "Auto Lab",                            "subtitle": "Automated electrochemistry","min_notice_hours": 4,  "max_days_ahead": 30, "max_duration_hours": 8},
+    "uv-vis-currie-500":              {"title": "UV-VIS Carry 500",                    "subtitle": "Optical spectroscopy",      "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "ocean-optics-uv-vis":            {"title": "Ocean Optics UV-VIS",                 "subtitle": "Optical spectroscopy",      "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "centrifuge":                     {"title": "Centrifuge",                          "subtitle": "Sample separation",         "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "pelletizer":                     {"title": "Pelletizer",                          "subtitle": "Pellet pressing",           "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "thermal-conductivity-system":    {"title": "Thermal Conductivity System",         "subtitle": "Thermal transport",         "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "freeze-dryer":                   {"title": "Freeze Dryer",                        "subtitle": "Lyophilization",            "min_notice_hours": 24, "max_days_ahead": 30, "max_duration_hours": 8},
+    "spin-coater":                    {"title": "Spin Coater",                         "subtitle": "Thin film deposition",      "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "hot-plate-orange":               {"title": "Hot Plate (Orange)",                  "subtitle": "Heating / stirring",        "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "hot-plate-white":                {"title": "Hot Plate (White)",                   "subtitle": "Heating / stirring",        "min_notice_hours": 1,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "electrospinning":                {"title": "Electrospinning",                     "subtitle": "Nanofibre fabrication",     "min_notice_hours": 4,  "max_days_ahead": 30, "max_duration_hours": 4},
+    "rotary-evaporator":              {"title": "Rotary Evaporator",                   "subtitle": "Solvent evaporation",       "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
 }
 
 # -------------------------------------------------------- Per-lab admins ----
@@ -83,6 +90,30 @@ for _slug in LABS.keys():
         "username": os.environ.get(f"ADMIN_{_key}_USERNAME", "").strip(),
         "password": os.environ.get(f"ADMIN_{_key}_PASSWORD", "").strip(),
     }
+
+# -------------------------------------------------------- Lab admin display info --
+# Responsible person and email shown at the top of each lab booking page.
+LAB_ADMIN_INFO: Dict[str, Dict[str, str]] = {
+    "auto-lab":                      {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
+    "manual-drying-oven":            {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
+    "automated-drying-oven":         {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
+    "automated-drying-oven-infitek": {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
+    "furnace":                       {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
+    "lenton-elite-furnace":          {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
+    "spin-coater":                   {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
+    "sputtering":                    {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
+    "pelletizer":                    {"name": "Mr Awad Ismail",           "email": "iawad196@gmail.com"},
+    "uv-vis-currie-500":             {"name": "Dr Chester Kotsedi",       "email": ""},
+    "ocean-optics-uv-vis":           {"name": "Dr Nandipha Botha",        "email": "nbotha@tlabs.ac.za"},
+    "freeze-dryer":                  {"name": "Dr Xolisa Nxele",          "email": "nxelex@unisa.ac.za"},
+    "hot-plate-orange":              {"name": "Dr Adama",                 "email": ""},
+    "hot-plate-white":               {"name": "Dr Adama",                 "email": ""},
+    "electrospinning":               {"name": "Dr Adama",                 "email": ""},
+    "rotary-evaporator":             {"name": "Dr Amjid Khan",            "email": "khana2@unisa.ac.za"},
+    "centrifuge":                    {"name": "",                         "email": ""},
+    "thermal-conductivity-system":   {"name": "",                         "email": ""},
+    "xps":                           {"name": "",                         "email": ""},
+}
 
 # ------------------------------------------------ Chemical inventory admin --
 CHEM_ADMIN_EMAIL    = os.environ.get("CHEM_ADMIN_EMAIL", "").strip()
@@ -105,6 +136,10 @@ SMTP_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", "").strip()
 
 # BOOKING_ADMIN_EMAIL — who receives new booking notifications
 BOOKING_ADMIN_EMAIL = os.environ.get("BOOKING_ADMIN_EMAIL", SMTP_FROM_EMAIL).strip()
+
+# Shared secret that guards the scheduled /reminders/* endpoints so they can
+# only be triggered by the cron job, not random visitors.
+CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()
 
 def smtp_ready() -> bool:
     return bool(SMTP_FROM_EMAIL and (BREVO_API_KEY or RESEND_API_KEY))
@@ -881,8 +916,9 @@ def iter_workdays(start_d: date, end_d: date):
         d += timedelta(days=1)
 
 def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
-    # Oven labs (furnace, manual-drying-oven, automated-drying-oven) have 2 fixed slots
-    oven_labs = ["furnace", "manual-drying-oven", "automated-drying-oven"]
+    # Oven labs have 2 fixed half-day slots
+    oven_labs = ["furnace", "lenton-elite-furnace", "manual-drying-oven",
+                 "automated-drying-oven", "automated-drying-oven-infitek"]
     if lab_slug in oven_labs:
         return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
     # All other labs use dynamic slot generation
@@ -1863,7 +1899,8 @@ def lab_generic(lab_slug: str):
         user_email = (request.form.get("user_email") or "").strip()
         notes      = (request.form.get("notes") or "").strip()
         # Validate oven labs have valid time slots
-        oven_labs = ["manual-drying-oven", "automated-drying-oven"]
+        oven_labs = ["manual-drying-oven", "automated-drying-oven", "automated-drying-oven-infitek",
+                     "lenton-elite-furnace"]
         if lab_slug in oven_labs:
             for d, s, e in slots:
                 if not is_valid_oven_block(s, e):
@@ -1887,16 +1924,16 @@ def lab_generic(lab_slug: str):
                 if first_id is None: first_id = bid
             b = db_get_booking(first_id)
             try:
-                notify_user_submission(lab_slug, b)
                 notify_admin_new_booking(lab_slug, b,
                     url_for("approve_booking", token=b["approval_token"], _external=True),
                     url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
-            flash(f"Booking submitted for {lab['title']}! You'll receive a confirmation email.", "success")
+            flash(f"Booking submitted for {lab['title']}! You'll receive an email once your request is reviewed.", "success")
             return redirect(url_for("lab_generic", lab_slug=lab_slug))
     days = availability_days(lab_slug)
     return render_template("lab_generic.html", lab_slug=lab_slug,
                            lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           lab_admin_info=LAB_ADMIN_INFO.get(lab_slug, {}),
                            form=form, errors=errors, days=days,
                            availability_url=url_for("lab_availability", lab_slug=lab_slug))
 
@@ -1942,16 +1979,16 @@ def furnace():
                 if first_id is None: first_id = bid
             b = db_get_booking(first_id)
             try:
-                notify_user_submission(lab_slug, b)
                 notify_admin_new_booking(lab_slug, b,
                     url_for("approve_booking", token=b["approval_token"], _external=True),
                     url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
-            flash("Furnace booking submitted!", "success")
+            flash("Furnace booking submitted! You'll receive an email once your request is reviewed.", "success")
             return redirect(url_for("furnace"))
     days = availability_days(lab_slug)
     return render_template("furnace.html", lab_slug=lab_slug,
                            lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           lab_admin_info=LAB_ADMIN_INFO.get(lab_slug, {}),
                            form=form, errors=errors, days=days,
                            availability_url=url_for("lab_availability", lab_slug=lab_slug))
 
@@ -1993,16 +2030,16 @@ def xps():
                 if first_id is None: first_id = bid
             b = db_get_booking(first_id)
             try:
-                notify_user_submission(lab_slug, b)
                 notify_admin_new_booking(lab_slug, b,
                     url_for("approve_booking", token=b["approval_token"], _external=True),
                     url_for("reject_booking",  token=b["approval_token"], _external=True))
             except Exception: pass
-            flash("XPS booking submitted!", "success")
+            flash("XPS booking submitted! You'll receive an email once your request is reviewed.", "success")
             return redirect(url_for("xps"))
     days = availability_days(lab_slug)
     return render_template("xps.html", lab_slug=lab_slug,
                            lab_title=lab["title"], lab_subtitle=lab["subtitle"],
+                           lab_admin_info=LAB_ADMIN_INFO.get(lab_slug, {}),
                            form=form, errors=errors, days=days,
                            availability_url=url_for("lab_availability", lab_slug=lab_slug))
 
@@ -2038,6 +2075,11 @@ def cancel_booking_get(token: str):
 
 @app.get("/reminders/send")
 def send_reminders():
+    if CRON_SECRET:
+        token = (request.args.get("token") or
+                 request.headers.get("X-Cron-Secret") or "")
+        if not hmac.compare_digest(token, CRON_SECRET):
+            abort(403)
     candidates = db_get_reminder_candidates()
     sent = 0
     for b in candidates:
@@ -2048,6 +2090,79 @@ def send_reminders():
         except Exception:
             pass
     return {"sent": sent}, 200
+
+CLEANING_EMAIL_BODY = """\
+Hello {name},
+
+This is a reminder that Friday is laboratory cleaning day.
+
+As someone who used the Nanolab facilities this week, please ensure the following
+before you leave on Friday:
+
+  - Bins are empty
+  - No dirty glassware by the sinks or benches
+  - Bench tops are dust free
+  - All equipment is clean
+
+Thank you for helping keep the lab safe and tidy for everyone.
+
+Regards,
+{from_name}
+"""
+
+def db_get_weekly_lab_users() -> List[Dict[str, str]]:
+    """Return unique (user_name, user_email) pairs for approved/pending bookings this Mon–Thu."""
+    init_db()
+    today = datetime.now(TZ).date()
+    mon = today - timedelta(days=today.weekday())  # Monday of current week
+    thu = mon + timedelta(days=3)
+    if USE_POSTGRES:
+        conn = _pg_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT DISTINCT user_name, user_email FROM bookings "
+                    "WHERE booking_date >= %s::date AND booking_date <= %s::date "
+                    "AND status IN ('approved','pending') AND cancelled_at IS NULL",
+                    (mon.isoformat(), thu.isoformat()))
+                return [{"user_name": r[0], "user_email": r[1]} for r in cur.fetchall()]
+        finally:
+            _pg_putconn(conn)
+    else:
+        conn = sqlite3.connect(SQLITE_PATH); conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT DISTINCT user_name, user_email FROM bookings "
+            "WHERE booking_date >= ? AND booking_date <= ? "
+            "AND status IN ('approved','pending') AND (cancelled_at IS NULL OR cancelled_at='')",
+            (mon.isoformat(), thu.isoformat())).fetchall()
+        conn.close()
+        return [{"user_name": r["user_name"], "user_email": r["user_email"]} for r in rows]
+
+@app.get("/reminders/thursday-cleaning")
+def send_thursday_cleaning():
+    """Send Friday cleaning duty email to all users who booked this week.
+    Triggered every Thursday by the Render cron job (see render.yaml).
+    Protected by CRON_SECRET when that env var is set.
+    """
+    if CRON_SECRET:
+        token = (request.args.get("token") or
+                 request.headers.get("X-Cron-Secret") or "")
+        if not hmac.compare_digest(token, CRON_SECRET):
+            abort(403)
+    users = db_get_weekly_lab_users()
+    sent = 0
+    for u in users:
+        try:
+            body = CLEANING_EMAIL_BODY.format(
+                name=u["user_name"] or "Lab User",
+                from_name=SMTP_FROM_NAME)
+            _send_async(u["user_email"],
+                        "Friday Laboratory Cleaning Duty Reminder — U2ACN2 Nanolab", body)
+            sent += 1
+        except Exception:
+            pass
+    return {"sent": sent, "recipients": [u["user_email"] for u in users]}, 200
+
 
 if __name__ == "__main__":
     app.run(debug=True)

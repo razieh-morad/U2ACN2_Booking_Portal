@@ -13,6 +13,13 @@
     <a href="{{ availability_url }}" class="btn btn-ghost">View Availability</a>
   </div>
 
+  {% if lab_admin_info and lab_admin_info.name %}
+  <div class="lab-admin-banner">
+    <strong>Lab Responsible Person:</strong>
+    {{ lab_admin_info.name }}{% if lab_admin_info.email %} &mdash; <a href="mailto:{{ lab_admin_info.email }}">{{ lab_admin_info.email }}</a>{% endif %}
+  </div>
+  {% endif %}
+
   {% if errors %}
   <div class="error-box">
     <strong>Please fix the following:</strong>
