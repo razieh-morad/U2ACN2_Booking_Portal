@@ -1195,6 +1195,21 @@ def notify_user_cancelled(lab_slug: str, b: Dict) -> None:
     )
     _send_async(b["user_email"], f"Booking cancelled — {lab_title}", body)
 
+def notify_user_admin_cancelled(lab_slug: str, b: Dict, reason: str) -> None:
+    """Sent when an admin cancels a previously APPROVED booking. Reason required."""
+    if not smtp_ready(): return
+    lab_title = LABS[lab_slug]["title"]
+    body = (
+        f"Hello {b['user_name']},\n\n"
+        f"We're sorry, but your APPROVED booking for {lab_title} has been cancelled "
+        f"by the lab administrator.\n\n"
+        f" Lab    : {lab_title}\n Slot   : {_slot_str(b)}\n Ref    : #{b['id']}\n"
+        f" Reason : {reason}\n\n"
+        f"Please contact the lab if you have any questions or wish to rebook.\n\n"
+        f"Regards,\n{SMTP_FROM_NAME}\n"
+    )
+    _send_async(b["user_email"], f"Approved booking cancelled — {lab_title}", body)
+
 def notify_user_reminder(lab_slug: str, b: Dict) -> None:
     if not smtp_ready(): return
     lab_title = LABS[lab_slug]["title"]
@@ -1393,20 +1408,26 @@ def db_set_booking_status(booking_id: int, status: str, rejection_reason: str = 
                      (status,rejection_reason or None,approval_note or None,now_iso,updated_by or None,booking_id))
         conn.commit(); conn.close()
 
-def db_cancel_booking(booking_id: int) -> None:
+def db_cancel_booking(booking_id: int, reason: str = "", updated_by: str = "") -> None:
     init_db()
     now_iso = datetime.utcnow().isoformat(timespec="seconds")+"Z"
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
             with conn.cursor() as cur:
-                cur.execute("UPDATE bookings SET status='rejected',cancelled_at=NOW(),cancel_token=NULL WHERE id=%s",(booking_id,))
+                cur.execute("UPDATE bookings SET status='rejected',rejection_reason=%s,"
+                            "cancelled_at=NOW(),updated_at=NOW(),updated_by=%s,"
+                            "cancel_token=NULL,approval_token=NULL WHERE id=%s",
+                            (reason or None, updated_by or None, booking_id))
                 conn.commit()
         finally:
             _pg_putconn(conn)
     else:
         conn = sqlite3.connect(SQLITE_PATH)
-        conn.execute("UPDATE bookings SET status='rejected',cancelled_at=?,cancel_token=NULL WHERE id=?",(now_iso,booking_id))
+        conn.execute("UPDATE bookings SET status='rejected',rejection_reason=?,"
+                     "cancelled_at=?,updated_at=?,updated_by=?,"
+                     "cancel_token=NULL,approval_token=NULL WHERE id=?",
+                     (reason or None, now_iso, now_iso, updated_by or None, booking_id))
         conn.commit(); conn.close()
 
 def db_delete_booking(booking_id: int) -> None:
@@ -1894,14 +1915,20 @@ def admin_edit_booking(lab_slug: str, booking_id: int):
 
 @app.route("/admin/<lab_slug>/bulk", methods=["POST"])
 def admin_bulk_action(lab_slug: str):
-    """Approve or reject many bookings at once (or all pending)."""
+    """Approve / reject pending bookings (single or bulk), or cancel an
+    already-APPROVED booking with a mandatory reason."""
     if lab_slug not in LABS: abort(404)
     redir = require_admin(lab_slug)
     if redir: return redir
     action = (request.form.get("action") or "").strip()
     reason = (request.form.get("rejection_reason") or "").strip()
-    if action not in ("approve", "reject"):
+    if action not in ("approve", "reject", "cancel"):
         flash("Unknown action.", "error")
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+    # Cancelling an approved booking must carry a reason for the user.
+    if action == "cancel" and not reason:
+        flash("A reason is required to cancel an approved booking.", "error")
         return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
     # Determine which bookings to act on.
@@ -1914,31 +1941,59 @@ def admin_bulk_action(lab_slug: str):
             try: ids.append(int(sid))
             except (TypeError, ValueError): continue
 
-    target = "approved" if action == "approve" else "rejected"
     admin_user = session.get("admin_username", "admin")
     count = 0
     for bid in ids:
         b = db_get_booking(bid)
         if not b or b.get("lab_slug") != lab_slug: continue
-        if b.get("status") == target:  # already in this state — skip (no re-email)
-            continue
+        status = b.get("status")
         if action == "approve":
+            if status == "approved": continue          # already approved — skip
             db_set_booking_status(bid, "approved", updated_by=admin_user)
             try: notify_user_approved(lab_slug, b)
             except Exception: pass
-        else:
+        elif action == "reject":
+            if status == "rejected": continue          # already rejected — skip
             db_set_booking_status(bid, "rejected", rejection_reason=reason,
                                   updated_by=admin_user)
             try: notify_user_rejected(lab_slug, b, reason)
             except Exception: pass
+        else:  # cancel — only meaningful for an approved booking
+            if status != "approved": continue
+            db_cancel_booking(bid, reason=reason, updated_by=admin_user)
+            try: notify_user_admin_cancelled(lab_slug, b, reason)
+            except Exception: pass
         count += 1
 
-    verb = "approved" if action == "approve" else "rejected"
+    verb = {"approve": "approved", "reject": "rejected", "cancel": "cancelled"}[action]
     if count:
         flash(f"{count} booking(s) {verb}. Emails sent to the affected users.", "success")
     else:
         flash("No eligible bookings to update.", "error")
     return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+@app.route("/admin/<lab_slug>/export.csv")
+def admin_export_bookings(lab_slug: str):
+    """Download a CSV (opens in Excel) of bookings for this lab.
+    Defaults to approved only; pass ?status=all for everything."""
+    if lab_slug not in LABS: abort(404)
+    redir = require_admin(lab_slug)
+    if redir: return redir
+    status_filter = (request.args.get("status") or "approved").strip().lower()
+    rows = db_list_bookings(lab_slug)
+    if status_filter != "all":
+        rows = [r for r in rows if (r.get("status") or "").lower() == status_filter]
+
+    si = StringIO()
+    w = csv.writer(si)
+    w.writerow(EXPORT_COLUMNS)
+    for r in rows:
+        w.writerow([r.get(c, "") for c in EXPORT_COLUMNS])
+    resp = make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv"
+    fname = f"{lab_slug}_{status_filter}_bookings.csv"
+    resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
+    return resp
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
