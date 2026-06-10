@@ -33,16 +33,17 @@ services:
 
       # ── Chemical Inventory ──
       - key: CHEM_ADMIN_PASSWORD
-        value: "changeme"
+        sync: false        # set the real password on the dashboard
       - key: CHEM_ADMIN_EMAIL
         value: ""
       - key: PURCHASE_NOTIFY_EMAILS
         value: ""
 
       # ── Per-lab admin credentials ──
-      # Each lab has its OWN username + password. Set them all on the Render
-      # dashboard (or here). Pattern: ADMIN_<LABSLUG>_USERNAME / _PASSWORD,
-      # where <LABSLUG> is the lab slug upper-cased with hyphens -> underscores.
+      # Credentials are NOT stored in this file or in app.py. They are set as
+      # environment variables on the Render dashboard (Environment tab).
+      # Key pattern: ADMIN_<LABSLUG>_USERNAME / _PASSWORD, where <LABSLUG> is
+      # the lab slug upper-cased with hyphens -> underscores. For example:
       #
       #   Carbolite Furnace ............... ADMIN_FURNACE_USERNAME / _PASSWORD
       #   XPS ............................. ADMIN_XPS_USERNAME / _PASSWORD
@@ -64,84 +65,8 @@ services:
       #   Electrospinning ................. ADMIN_ELECTROSPINNING_USERNAME / _PASSWORD
       #   Rotary Evaporator ............... ADMIN_ROTARY_EVAPORATOR_USERNAME / _PASSWORD
       #
-      # NOTE: 'admin' / '2026' are temporary shared credentials. Change each
-      # lab to its own secret on the Render dashboard when convenient.
-      - key: ADMIN_FURNACE_USERNAME
-        value: admin
-      - key: ADMIN_FURNACE_PASSWORD
-        value: "2026"
-      - key: ADMIN_XPS_USERNAME
-        value: admin
-      - key: ADMIN_XPS_PASSWORD
-        value: "2026"
-      - key: ADMIN_MANUAL_DRYING_OVEN_USERNAME
-        value: admin
-      - key: ADMIN_MANUAL_DRYING_OVEN_PASSWORD
-        value: "2026"
-      - key: ADMIN_AUTOMATED_DRYING_OVEN_USERNAME
-        value: admin
-      - key: ADMIN_AUTOMATED_DRYING_OVEN_PASSWORD
-        value: "2026"
-      - key: ADMIN_AUTOMATED_DRYING_OVEN_INFITEK_USERNAME
-        value: admin
-      - key: ADMIN_AUTOMATED_DRYING_OVEN_INFITEK_PASSWORD
-        value: "2026"
-      - key: ADMIN_LENTON_ELITE_FURNACE_USERNAME
-        value: admin
-      - key: ADMIN_LENTON_ELITE_FURNACE_PASSWORD
-        value: "2026"
-      - key: ADMIN_SPUTTERING_USERNAME
-        value: admin
-      - key: ADMIN_SPUTTERING_PASSWORD
-        value: "2026"
-      - key: ADMIN_AUTO_LAB_USERNAME
-        value: admin
-      - key: ADMIN_AUTO_LAB_PASSWORD
-        value: "2026"
-      - key: ADMIN_UV_VIS_CURRIE_500_USERNAME
-        value: admin
-      - key: ADMIN_UV_VIS_CURRIE_500_PASSWORD
-        value: "2026"
-      - key: ADMIN_OCEAN_OPTICS_UV_VIS_USERNAME
-        value: admin
-      - key: ADMIN_OCEAN_OPTICS_UV_VIS_PASSWORD
-        value: "2026"
-      - key: ADMIN_CENTRIFUGE_USERNAME
-        value: admin
-      - key: ADMIN_CENTRIFUGE_PASSWORD
-        value: "2026"
-      - key: ADMIN_PELLETIZER_USERNAME
-        value: admin
-      - key: ADMIN_PELLETIZER_PASSWORD
-        value: "2026"
-      - key: ADMIN_THERMAL_CONDUCTIVITY_SYSTEM_USERNAME
-        value: admin
-      - key: ADMIN_THERMAL_CONDUCTIVITY_SYSTEM_PASSWORD
-        value: "2026"
-      - key: ADMIN_FREEZE_DRYER_USERNAME
-        value: admin
-      - key: ADMIN_FREEZE_DRYER_PASSWORD
-        value: "2026"
-      - key: ADMIN_SPIN_COATER_USERNAME
-        value: admin
-      - key: ADMIN_SPIN_COATER_PASSWORD
-        value: "2026"
-      - key: ADMIN_HOT_PLATE_ORANGE_USERNAME
-        value: admin
-      - key: ADMIN_HOT_PLATE_ORANGE_PASSWORD
-        value: "2026"
-      - key: ADMIN_HOT_PLATE_WHITE_USERNAME
-        value: admin
-      - key: ADMIN_HOT_PLATE_WHITE_PASSWORD
-        value: "2026"
-      - key: ADMIN_ELECTROSPINNING_USERNAME
-        value: admin
-      - key: ADMIN_ELECTROSPINNING_PASSWORD
-        value: "2026"
-      - key: ADMIN_ROTARY_EVAPORATOR_USERNAME
-        value: admin
-      - key: ADMIN_ROTARY_EVAPORATOR_PASSWORD
-        value: "2026"
+      # There is no built-in default — a lab cannot be opened until its two
+      # env vars are set on the dashboard.
 
   # ──────────────────────────────────────────────────────────────────────
   #  Scheduled job: Friday cleaning-duty reminder.

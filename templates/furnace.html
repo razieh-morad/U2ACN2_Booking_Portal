@@ -13,10 +13,13 @@
     <a href="{{ availability_url }}" class="btn btn-ghost">View Availability</a>
   </div>
 
-  {% if lab_admin_info and lab_admin_info.name %}
+  {% if lab_admin_info and (lab_admin_info.people or lab_admin_info.note) %}
   <div class="lab-admin-banner">
-    <strong>Lab Responsible Person:</strong>
-    {{ lab_admin_info.name }}{% if lab_admin_info.email %} &mdash; <a href="mailto:{{ lab_admin_info.email }}">{{ lab_admin_info.email }}</a>{% endif %}
+    {% if lab_admin_info.people %}
+    <strong>Lab Responsible Person{% if lab_admin_info.people|length > 1 %}s{% endif %}:</strong>
+    {% for p in lab_admin_info.people %}{{ p.name }}{% if p.email %} (<a href="mailto:{{ p.email }}">{{ p.email }}</a>){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}
+    {% endif %}
+    {% if lab_admin_info.note %}<div class="lab-admin-note">⚠️ {{ lab_admin_info.note }}</div>{% endif %}
   </div>
   {% endif %}
 

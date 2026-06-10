@@ -78,41 +78,68 @@ LABS: Dict[str, Dict[str, Any]] = {
     "rotary-evaporator":              {"title": "Rotary Evaporator",                   "subtitle": "Solvent evaporation",       "min_notice_hours": 2,  "max_days_ahead": 30, "max_duration_hours": 4},
 }
 
+# ----------------------------------------------------- Slot configuration ----
+# Labs that use two fixed half-day (4-hour) slots: 08:00–12:00 and 12:00–16:00.
+# Every other lab uses dynamic 1-hour slots.
+HALF_DAY_LABS = {
+    "furnace",
+    "lenton-elite-furnace",
+    "auto-lab",
+    "manual-drying-oven",
+    "automated-drying-oven",
+    "automated-drying-oven-infitek",
+    "sputtering",
+    "thermal-conductivity-system",
+    "freeze-dryer",
+    "electrospinning",
+    "rotary-evaporator",
+}
+
 # -------------------------------------------------------- Per-lab admins ----
 
 def _env_slug(slug: str) -> str:
     return slug.upper().replace("-", "_").replace(" ", "_")
 
+# Optional shared fallback for any lab that doesn't have its own
+# ADMIN_<SLUG>_USERNAME / _PASSWORD env vars set. There is NO hardcoded
+# default — credentials must be supplied via environment variables (set on
+# the Render dashboard). A lab with no credentials configured cannot be
+# opened until its env vars are added.
+DEFAULT_ADMIN_USERNAME = os.environ.get("DEFAULT_ADMIN_USERNAME", "").strip()
+DEFAULT_ADMIN_PASSWORD = os.environ.get("DEFAULT_ADMIN_PASSWORD", "").strip()
+
 ADMIN: Dict[str, Dict[str, str]] = {}
 for _slug in LABS.keys():
     _key = _env_slug(_slug)
     ADMIN[_slug] = {
-        "username": os.environ.get(f"ADMIN_{_key}_USERNAME", "").strip(),
-        "password": os.environ.get(f"ADMIN_{_key}_PASSWORD", "").strip(),
+        "username": os.environ.get(f"ADMIN_{_key}_USERNAME", DEFAULT_ADMIN_USERNAME).strip(),
+        "password": os.environ.get(f"ADMIN_{_key}_PASSWORD", DEFAULT_ADMIN_PASSWORD).strip(),
     }
 
 # -------------------------------------------------------- Lab admin display info --
 # Responsible person and email shown at the top of each lab booking page.
-LAB_ADMIN_INFO: Dict[str, Dict[str, str]] = {
-    "auto-lab":                      {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
-    "manual-drying-oven":            {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
-    "automated-drying-oven":         {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
-    "automated-drying-oven-infitek": {"name": "Dr Nolubabalo Matinise",  "email": "matinn@unisa.ac.za"},
-    "furnace":                       {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
-    "lenton-elite-furnace":          {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
-    "spin-coater":                   {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
-    "sputtering":                    {"name": "Dr Itani Madiba",          "email": "madibig@unisa.ac.za"},
-    "pelletizer":                    {"name": "Mr Awad Ismail",           "email": "iawad196@gmail.com"},
-    "uv-vis-currie-500":             {"name": "Dr Chester Kotsedi",       "email": ""},
-    "ocean-optics-uv-vis":           {"name": "Dr Nandipha Botha",        "email": "nbotha@tlabs.ac.za"},
-    "freeze-dryer":                  {"name": "Dr Xolisa Nxele",          "email": "nxelex@unisa.ac.za"},
-    "hot-plate-orange":              {"name": "Dr Adama",                 "email": ""},
-    "hot-plate-white":               {"name": "Dr Adama",                 "email": ""},
-    "electrospinning":               {"name": "Dr Adama",                 "email": ""},
-    "rotary-evaporator":             {"name": "Dr Amjid Khan",            "email": "khana2@unisa.ac.za"},
-    "centrifuge":                    {"name": "",                         "email": ""},
-    "thermal-conductivity-system":   {"name": "",                         "email": ""},
-    "xps":                           {"name": "",                         "email": ""},
+LAB_ADMIN_INFO: Dict[str, Dict[str, Any]] = {
+    "auto-lab":                      {"people": [{"name": "Dr Nolubabalo Matinise", "email": "matinn@unisa.ac.za"}]},
+    "manual-drying-oven":            {"people": [{"name": "Dr Nolubabalo Matinise", "email": "matinn@unisa.ac.za"}]},
+    "automated-drying-oven":         {"people": [{"name": "Dr Nolubabalo Matinise", "email": "matinn@unisa.ac.za"}]},
+    "automated-drying-oven-infitek": {"people": [{"name": "Dr Nolubabalo Matinise", "email": "matinn@unisa.ac.za"}]},
+    "furnace":                       {"people": [{"name": "Dr Itani Madiba",        "email": "madibig@unisa.ac.za"}]},
+    "lenton-elite-furnace":          {"people": [{"name": "Dr Itani Madiba",        "email": "madibig@unisa.ac.za"}]},
+    "spin-coater":                   {"people": [{"name": "Dr Itani Madiba",        "email": "madibig@unisa.ac.za"}]},
+    "sputtering":                    {"people": [{"name": "Dr Itani Madiba",        "email": "madibig@unisa.ac.za"}]},
+    "pelletizer":                    {"people": [{"name": "Mr Awad Ismail",         "email": "iawad196@gmail.com"}]},
+    "uv-vis-currie-500":             {"people": [{"name": "Dr Chester Kotsedi",     "email": "kotsedi@tlabs.ac.za"}]},
+    "ocean-optics-uv-vis":           {"people": [{"name": "Dr Nandipha Botha",      "email": "nbotha@tlabs.ac.za"}]},
+    "freeze-dryer":                  {"people": [{"name": "Dr Xolisa Nxele",        "email": "nxelex@unisa.ac.za"}]},
+    "centrifuge":                    {"people": [{"name": "Dr Nandipha Botha",      "email": "nbotha@tlabs.ac.za"}]},
+    "hot-plate-orange":              {"people": [{"name": "Dr Adama Fall",          "email": "falla@unisa.ac.za"}]},
+    "hot-plate-white":               {"people": [{"name": "Dr Adama Fall",          "email": "falla@unisa.ac.za"}]},
+    "electrospinning":               {"people": [{"name": "Dr Adama Fall",          "email": "falla@unisa.ac.za"}]},
+    "rotary-evaporator":             {"people": [{"name": "Dr Amjid Khan",          "email": "khana2@unisa.ac.za"}]},
+    "thermal-conductivity-system":   {"people": [{"name": "Dr Mahmood Akbari",      "email": "makbari@tlabs.ac.za"},
+                                                  {"name": "Mr Meisam Aligholami",  "email": "agh.meisam@gmail.com"}]},
+    "xps":                           {"people": [{"name": "Dr Itani Madiba",        "email": "madibig@unisa.ac.za"}],
+                                      "note": "This instrument is not operational yet — bookings are not available."},
 }
 
 # ------------------------------------------------ Chemical inventory admin --
@@ -916,10 +943,8 @@ def iter_workdays(start_d: date, end_d: date):
         d += timedelta(days=1)
 
 def build_slots_for_day(d: date, lab_slug: str) -> List[Tuple[time, time]]:
-    # Oven labs have 2 fixed half-day slots
-    oven_labs = ["furnace", "lenton-elite-furnace", "manual-drying-oven",
-                 "automated-drying-oven", "automated-drying-oven-infitek"]
-    if lab_slug in oven_labs:
+    # Half-day labs have 2 fixed 4-hour slots
+    if lab_slug in HALF_DAY_LABS:
         return [(time(8, 0), time(12, 0)), (time(12, 0), time(16, 0))]
     # All other labs use dynamic slot generation
     slots: List[Tuple[time, time]] = []
@@ -1943,10 +1968,8 @@ def lab_generic(lab_slug: str):
         user_name  = (request.form.get("user_name") or "").strip()
         user_email = (request.form.get("user_email") or "").strip()
         notes      = (request.form.get("notes") or "").strip()
-        # Validate oven labs have valid time slots
-        oven_labs = ["manual-drying-oven", "automated-drying-oven", "automated-drying-oven-infitek",
-                     "lenton-elite-furnace"]
-        if lab_slug in oven_labs:
+        # Validate half-day labs only accept the two 4-hour blocks
+        if lab_slug in HALF_DAY_LABS:
             for d, s, e in slots:
                 if not is_valid_oven_block(s, e):
                     errors.append(f"Invalid slot for {lab['title']}: {s}–{e}. Only 08:00-12:00 and 12:00-16:00 are available.")
@@ -2156,11 +2179,13 @@ Regards,
 """
 
 def db_get_weekly_lab_users() -> List[Dict[str, str]]:
-    """Return unique (user_name, user_email) pairs for approved/pending bookings this Mon–Thu."""
+    """Return unique (user_name, user_email) pairs for approved/pending bookings
+    this week, Monday through Friday. The email goes out Thursday, but anyone
+    with a Friday booking must clean too, so Friday is included."""
     init_db()
     today = datetime.now(TZ).date()
     mon = today - timedelta(days=today.weekday())  # Monday of current week
-    thu = mon + timedelta(days=3)
+    fri = mon + timedelta(days=4)                  # Friday of current week
     if USE_POSTGRES:
         conn = _pg_conn()
         try:
@@ -2169,7 +2194,7 @@ def db_get_weekly_lab_users() -> List[Dict[str, str]]:
                     "SELECT DISTINCT user_name, user_email FROM bookings "
                     "WHERE booking_date >= %s::date AND booking_date <= %s::date "
                     "AND status IN ('approved','pending') AND cancelled_at IS NULL",
-                    (mon.isoformat(), thu.isoformat()))
+                    (mon.isoformat(), fri.isoformat()))
                 return [{"user_name": r[0], "user_email": r[1]} for r in cur.fetchall()]
         finally:
             _pg_putconn(conn)
@@ -2179,7 +2204,7 @@ def db_get_weekly_lab_users() -> List[Dict[str, str]]:
             "SELECT DISTINCT user_name, user_email FROM bookings "
             "WHERE booking_date >= ? AND booking_date <= ? "
             "AND status IN ('approved','pending') AND (cancelled_at IS NULL OR cancelled_at='')",
-            (mon.isoformat(), thu.isoformat())).fetchall()
+            (mon.isoformat(), fri.isoformat())).fetchall()
         conn.close()
         return [{"user_name": r["user_name"], "user_email": r["user_email"]} for r in rows]
 
