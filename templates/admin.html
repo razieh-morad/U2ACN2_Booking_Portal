@@ -13,11 +13,33 @@
     <a href="/admin/logout" class="btn btn-ghost">Logout</a>
   </div>
 
+  {% if bookings %}
+  <!-- Bulk action bar -->
+  <form id="bulk-form" method="post"
+        action="{{ url_for('admin_bulk_action', lab_slug=lab_slug) }}">
+    <input type="hidden" name="action" id="bulk-action" value="">
+    <input type="hidden" name="rejection_reason" id="bulk-reason" value="">
+    <div class="bulk-bar">
+      <span class="bulk-bar-label"><strong id="sel-count">0</strong> selected</span>
+      <button type="button" class="btn btn-sm btn-approve" onclick="bulkSubmit('approve')">✓ Approve selected</button>
+      <button type="button" class="btn btn-sm btn-reject"  onclick="bulkSubmit('reject')">✕ Reject selected</button>
+    </div>
+  </form>
+
+  <!-- Approve ALL pending -->
+  <form method="post" action="{{ url_for('admin_bulk_action', lab_slug=lab_slug) }}"
+        onsubmit="return confirm('Approve ALL pending bookings for {{ lab_title }}? Each user will be emailed.');"
+        style="margin-bottom:1rem;">
+    <input type="hidden" name="action" value="approve">
+    <input type="hidden" name="scope" value="all_pending">
+    <button type="submit" class="btn btn-sm btn-ghost">✓ Approve all pending</button>
+  </form>
+
   <div class="card" style="overflow-x:auto;">
-    {% if bookings %}
     <table class="data-table">
       <thead>
         <tr>
+          <th><input type="checkbox" id="chk-all" title="Select all"></th>
           <th>#</th>
           <th>Name</th>
           <th>Email</th>
@@ -32,29 +54,108 @@
       <tbody>
         {% for b in bookings %}
         <tr>
+          <td>
+            <input type="checkbox" class="chk-row" name="booking_ids"
+                   value="{{ b.id }}" form="bulk-form">
+          </td>
           <td>{{ b.id }}</td>
           <td>{{ b.user_name }}</td>
           <td><a href="mailto:{{ b.user_email }}">{{ b.user_email }}</a></td>
           <td>{{ b.booking_date }}</td>
           <td>{{ b.start_time[:5] }}</td>
           <td>{{ b.end_time[:5] }}</td>
-          <td>
-            <span class="status-badge status-{{ b.status }}">{{ b.status }}</span>
-          </td>
+          <td><span class="status-badge status-{{ b.status }}">{{ b.status }}</span></td>
           <td>{{ b.created_at[:10] if b.created_at else '—' }}</td>
           <td>
-            <a href="/admin/{{ lab_slug }}/booking/{{ b.id }}" class="btn btn-sm btn-ghost">Review</a>
+            <div class="row-actions">
+              {% if b.status != 'approved' %}
+              <form method="post" action="{{ url_for('admin_bulk_action', lab_slug=lab_slug) }}" style="display:inline;">
+                <input type="hidden" name="action" value="approve">
+                <input type="hidden" name="booking_ids" value="{{ b.id }}">
+                <button type="submit" class="btn btn-sm btn-approve">Approve</button>
+              </form>
+              {% endif %}
+              {% if b.status != 'rejected' %}
+              <form method="post" action="{{ url_for('admin_bulk_action', lab_slug=lab_slug) }}"
+                    class="inline-reject-form" data-name="{{ b.user_name }}" style="display:inline;">
+                <input type="hidden" name="action" value="reject">
+                <input type="hidden" name="booking_ids" value="{{ b.id }}">
+                <input type="hidden" name="rejection_reason" class="row-reason" value="">
+                <button type="submit" class="btn btn-sm btn-reject">Reject</button>
+              </form>
+              {% endif %}
+              <a href="/admin/{{ lab_slug }}/booking/{{ b.id }}" class="btn btn-sm btn-ghost">Review</a>
+            </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% else %}
-    <div class="empty-state">
-      <p>No bookings yet for this lab.</p>
-    </div>
-    {% endif %}
   </div>
+  {% else %}
+  <div class="card">
+    <div class="empty-state"><p>No bookings yet for this lab.</p></div>
+  </div>
+  {% endif %}
 
 </main>
+
+<style>
+  .bulk-bar {
+    display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
+    background: var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:.6rem .9rem; margin-bottom:.6rem;
+  }
+  .bulk-bar-label { font-size:.88rem; color: var(--text-soft); margin-right:.4rem; }
+  .row-actions { display:flex; gap:.35rem; align-items:center; flex-wrap:wrap; }
+  .chk-row, #chk-all { width:16px; height:16px; cursor:pointer; }
+</style>
+
+<script>
+(function () {
+  const bulkForm = document.getElementById('bulk-form');
+  const chkAll   = document.getElementById('chk-all');
+  const selCount = document.getElementById('sel-count');
+
+  function rows() { return Array.from(document.querySelectorAll('.chk-row')); }
+  function refresh() {
+    if (selCount) selCount.textContent = rows().filter(c => c.checked).length;
+  }
+
+  if (chkAll) {
+    chkAll.addEventListener('change', function () {
+      rows().forEach(c => c.checked = this.checked);
+      refresh();
+    });
+  }
+  rows().forEach(c => c.addEventListener('change', refresh));
+  refresh();
+
+  // Top bulk buttons
+  window.bulkSubmit = function (action) {
+    const checked = rows().filter(c => c.checked);
+    if (checked.length === 0) { alert('Please select at least one booking.'); return; }
+    document.getElementById('bulk-action').value = action;
+    if (action === 'reject') {
+      const reason = window.prompt('Optional reason for rejection (sent to all selected users):', '');
+      if (reason === null) return;            // cancelled
+      document.getElementById('bulk-reason').value = reason;
+    } else {
+      if (!confirm('Approve ' + checked.length + ' selected booking(s)? Each user will be emailed.')) return;
+    }
+    bulkForm.submit();
+  };
+
+  // Inline single-row reject → ask for optional reason
+  document.querySelectorAll('.inline-reject-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const reason = window.prompt('Optional reason for rejecting ' + form.dataset.name + "'s booking (sent to user):", '');
+      if (reason === null) return;            // cancelled
+      form.querySelector('.row-reason').value = reason;
+      form.submit();
+    });
+  });
+})();
+</script>
 {% endblock %}

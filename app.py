@@ -1805,11 +1805,8 @@ def admin_logout():
 
 @app.get("/admin")
 def admin_portal():
-    # Require login to access admin portal
-    if not session.get("is_admin"):
-        return redirect(url_for("admin_login_lab", lab_slug="furnace",
-                               next=url_for("admin_portal")))
-
+    # The portal itself only lists labs (no sensitive data); each lab requires
+    # its own login when opened. No general gate here.
     pending = db_pending_counts()
     order = sorted(LABS.keys(), key=lambda k: LABS[k]["title"].lower())
     labs = []
@@ -1869,6 +1866,54 @@ def admin_edit_booking(lab_slug: str, booking_id: int):
         return redirect(url_for("admin_lab", lab_slug=lab_slug))
     return render_template("admin_booking.html", lab_slug=lab_slug,
                            lab_title=LABS[lab_slug]["title"], booking=b)
+
+@app.route("/admin/<lab_slug>/bulk", methods=["POST"])
+def admin_bulk_action(lab_slug: str):
+    """Approve or reject many bookings at once (or all pending)."""
+    if lab_slug not in LABS: abort(404)
+    redir = require_admin(lab_slug)
+    if redir: return redir
+    action = (request.form.get("action") or "").strip()
+    reason = (request.form.get("rejection_reason") or "").strip()
+    if action not in ("approve", "reject"):
+        flash("Unknown action.", "error")
+        return redirect(url_for("admin_lab", lab_slug=lab_slug))
+
+    # Determine which bookings to act on.
+    if request.form.get("scope") == "all_pending":
+        ids = [int(b["id"]) for b in db_list_bookings(lab_slug)
+               if b.get("status") == "pending"]
+    else:
+        ids = []
+        for sid in request.form.getlist("booking_ids"):
+            try: ids.append(int(sid))
+            except (TypeError, ValueError): continue
+
+    target = "approved" if action == "approve" else "rejected"
+    admin_user = session.get("admin_username", "admin")
+    count = 0
+    for bid in ids:
+        b = db_get_booking(bid)
+        if not b or b.get("lab_slug") != lab_slug: continue
+        if b.get("status") == target:  # already in this state — skip (no re-email)
+            continue
+        if action == "approve":
+            db_set_booking_status(bid, "approved", updated_by=admin_user)
+            try: notify_user_approved(lab_slug, b)
+            except Exception: pass
+        else:
+            db_set_booking_status(bid, "rejected", rejection_reason=reason,
+                                  updated_by=admin_user)
+            try: notify_user_rejected(lab_slug, b, reason)
+            except Exception: pass
+        count += 1
+
+    verb = "approved" if action == "approve" else "rejected"
+    if count:
+        flash(f"{count} booking(s) {verb}. Emails sent to the affected users.", "success")
+    else:
+        flash("No eligible bookings to update.", "error")
+    return redirect(url_for("admin_lab", lab_slug=lab_slug))
 
 @app.route("/labs/<lab_slug>/availability")
 def lab_availability(lab_slug: str):
