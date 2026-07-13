@@ -44,12 +44,14 @@
           </div>
           <div class="picker-slots">
             {% for slot in day.slots %}
-            <label class="picker-slot {% if not slot.free %}picker-slot-taken{% endif %}{% if slot.pending %}picker-slot-pending{% endif %}">
+            <label class="picker-slot {% if not slot.free %}picker-slot-taken{% endif %}{% if slot.pending %}picker-slot-pending{% endif %}"
+                   {% if slot.holder %}title="{{ 'Pending' if slot.pending else 'Approved' }} — {{ slot.holder }}"{% endif %}>
               <input type="checkbox" name="slot" value="{{ slot.value }}"
                      {% if not slot.free or slot.pending %}disabled{% endif %}
                      class="slot-checkbox"/>
               <span>{{ slot.start }}–{{ slot.end }}</span>
               {% if slot.pending %}<span class="slot-badge">PENDING</span>{% endif %}
+              {% if slot.holder %}<span class="slot-holder">{{ slot.holder }}</span>{% endif %}
             </label>
             {% endfor %}
           </div>

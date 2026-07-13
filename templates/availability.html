@@ -8,7 +8,8 @@
     <div>
       <a href="/" class="back-link">← All Labs</a>
       <h1>{{ lab_title }}</h1>
-      <p class="page-sub">Next 14 working days — click a free slot to book it.</p>
+      <p class="page-sub">Next 14 working days — click a free slot to book it.
+         Booked slots show who holds them so you can arrange a swap.</p>
     </div>
     <a href="{{ booking_url }}" class="btn btn-primary">New Booking</a>
   </div>
@@ -27,9 +28,16 @@
            class="slot slot-free" title="Book {{ slot.start }}–{{ slot.end }}">
           {{ slot.start }}<br/><span class="slot-end">{{ slot.end }}</span>
         </a>
-        {% else %}
-        <div class="slot slot-taken" title="Already booked">
+        {% elif slot.status == 'closed' %}
+        <div class="slot slot-closed" title="No longer available today">
           {{ slot.start }}<br/><span class="slot-end">{{ slot.end }}</span>
+        </div>
+        {% else %}
+        <div class="slot {% if slot.status == 'pending' %}slot-pending{% else %}slot-taken{% endif %}"
+             title="{{ 'Pending' if slot.status == 'pending' else 'Approved' }}{% if slot.holder %} — {{ slot.holder }}{% endif %}">
+          {{ slot.start }}<br/><span class="slot-end">{{ slot.end }}</span>
+          {% if slot.status == 'pending' %}<span class="slot-tag">Pending</span>{% endif %}
+          {% if slot.holder %}<span class="slot-holder">{{ slot.holder }}</span>{% endif %}
         </div>
         {% endif %}
         {% endfor %}
@@ -43,8 +51,13 @@
 
   <div class="avail-legend">
     <span class="legend-item"><span class="dot dot-free"></span> Available</span>
-    <span class="legend-item"><span class="dot dot-taken"></span> Booked</span>
+    <span class="legend-item"><span class="dot dot-taken"></span> Approved</span>
+    <span class="legend-item"><span class="dot dot-pending"></span> Pending</span>
   </div>
+  <p class="page-sub" style="margin-top:.6rem">
+    Names show who currently holds each slot. To swap, contact that person
+    directly, or reach the lab's responsible person listed on the booking page.
+  </p>
 
 </main>
 {% endblock %}

@@ -384,14 +384,37 @@ a:hover { text-decoration: underline; }
   text-decoration: none;
 }
 .slot-free:hover { background: var(--success); color: #fff; text-decoration: none; }
-.slot-taken { background: var(--danger-bg); color: #aaa; border: 1px solid var(--danger-border); cursor: default; }
+.slot-taken { background: var(--danger-bg); color: #9a5a5a; border: 1px solid var(--danger-border); cursor: default; }
+.slot-pending { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-border); cursor: default; }
+.slot-closed { background: var(--page-bg); color: var(--muted); border: 1px dashed var(--border); cursor: default; }
 .slot-none  { background: var(--page-bg); color: var(--muted); font-size: .72rem; text-align: center; }
+
+/* Who holds a booked slot (name only) + pending tag, shown in the grid */
+.slot-holder {
+  display: block;
+  font-size: .64rem;
+  font-weight: 600;
+  line-height: 1.15;
+  margin-top: .2rem;
+  opacity: .85;
+  white-space: normal;
+  word-break: break-word;
+}
+.slot-tag {
+  display: block;
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-top: .15rem;
+}
 
 .avail-legend { display: flex; gap: 1.2rem; font-size: .82rem; color: var(--muted); margin-top: .4rem; }
 .legend-item  { display: flex; align-items: center; gap: .4rem; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .dot-free  { background: var(--success); }
 .dot-taken { background: #e57373; }
+.dot-pending { background: var(--warn-border); }
 
 /* ── Booking form layout ── */
 .booking-layout {
@@ -415,8 +438,10 @@ a:hover { text-decoration: underline; }
 .picker-slots { display: flex; flex-wrap: wrap; gap: .4rem; }
 .picker-slot {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: .4rem;
+  gap: .3rem .4rem;
   padding: .4rem .75rem;
   background: var(--accent-light);
   border: 1.5px solid var(--border);
