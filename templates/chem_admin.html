@@ -97,12 +97,18 @@
       <h1 style="font-size:1.3rem;margin:0;color:#fff;">⚗️ Chemical Inventory Admin</h1>
       <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">Manager: {{ chem_manager_name }} — requests sent to {{ chem_manager_email }}</p>
     </div>
-    <nav style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
-      <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.88rem;">Public View</a>
-      <a href="/chemicals/orders" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">Orders Page</a>
-      <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">⬇ Export CSV</a>
-      <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">Logout</a>
-    </nav>
+    <div class="topbar-right">
+      <nav style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.88rem;">Public View</a>
+        <a href="/chemicals/orders" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">Orders Page</a>
+        <a href="/admin/chemicals/export.csv" style="color:rgba(255,255,255,.7);text-decoration:none;font-size:.85rem;">⬇ Export CSV</a>
+        <a href="/admin/chemicals/logout" style="color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;">Logout</a>
+      </nav>
+      <div class="topbar-credit">
+        Designed &amp; developed by <strong>Dr. Razieh Morad</strong> ·
+        <a href="mailto:rmorad@tlabs.ac.za">rmorad@tlabs.ac.za</a>
+      </div>
+    </div>
   </div>
 </header>
 

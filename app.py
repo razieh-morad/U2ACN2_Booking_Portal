@@ -1624,9 +1624,11 @@ def index():
     init_db()
     pending = db_pending_counts()
     try:
+        chem_count       = len(_get_chemicals_all())
         chem_pending     = len(_list_chemical_requests(status="pending"))
         purchase_pending = len(_list_purchase_requests(status="pending"))
     except Exception:
+        chem_count = 0
         chem_pending = 0
         purchase_pending = 0
     labs = sorted(
@@ -1639,6 +1641,7 @@ def index():
     return render_template("index.html", labs=labs,
                            admin_portal_url=url_for("admin_portal"),
                            chem_url=url_for("chemicals"),
+                           chem_count=chem_count,
                            chem_pending=chem_pending,
                            purchase_pending=purchase_pending)
 
