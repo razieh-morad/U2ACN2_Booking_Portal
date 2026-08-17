@@ -34,10 +34,16 @@ services:
       # ── Chemical Inventory ──
       - key: CHEM_ADMIN_PASSWORD
         sync: false        # set the real password on the dashboard
+      # Chemical inventory manager — receives all chemical & purchase requests.
+      - key: CHEM_MANAGER_NAME
+        value: "Dr. Kgotla Masibi"
+      - key: CHEM_MANAGER_EMAIL
+        value: "masibikk@gmail.com"
+      # Where requests are emailed (defaults to the manager if left blank).
       - key: CHEM_ADMIN_EMAIL
-        value: ""
+        value: "masibikk@gmail.com"
       - key: PURCHASE_NOTIFY_EMAILS
-        value: ""
+        value: "masibikk@gmail.com"
 
       # ── Per-lab admin credentials ──
       # Credentials are NOT stored in this file or in app.py. They are set as

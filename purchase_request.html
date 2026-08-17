@@ -57,16 +57,28 @@
     .error-list { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a;
                   border-radius:8px; padding:.8rem 1.2rem; margin-bottom:1rem; }
     .error-list li { font-size:.88rem; }
+
+    .manager-banner {
+      display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
+      background:var(--card-bg); border:1px solid var(--border);
+      border-left:4px solid var(--accent); border-radius:10px;
+      padding:.85rem 1.1rem; margin-bottom:1.4rem;
+    }
+    .manager-banner .mgr-icon { font-size:1.5rem; line-height:1; }
+    .manager-banner .mgr-text { font-size:.9rem; color:var(--muted); }
+    .manager-banner .mgr-text strong { color:var(--text); }
+    .manager-banner a { color:var(--accent); font-weight:600; text-decoration:none; }
+    .manager-banner a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
 <header class="topbar">
   <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
     <div>
-      <h1 style="font-size:1.3rem;margin:0;">🛒 Purchase Request</h1>
-      <p class="sub" style="margin:0;">Request a new chemical for the Nanolab inventory</p>
+      <h1 style="font-size:1.3rem;margin:0;color:#fff;">🛒 Purchase Request</h1>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">Request a new chemical for the Nanolab inventory</p>
     </div>
-    <a href="/chemicals" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">
+    <a href="/chemicals" style="color:rgba(255,255,255,.85);text-decoration:none;font-size:.9rem;">
       ← Back to Inventory
     </a>
   </div>
@@ -87,13 +99,23 @@
     </ul>
     {% endif %}
 
+    <div class="manager-banner">
+      <span class="mgr-icon">👩‍🔬</span>
+      <span class="mgr-text">
+        This request goes to the chemical inventory manager,
+        <strong>{{ chem_manager_name }}</strong>
+        (<a href="mailto:{{ chem_manager_email }}">{{ chem_manager_email }}</a>).
+        Please give enough detail to identify the exact chemical, its grade and the amount you need.
+      </span>
+    </div>
+
     <div class="card">
       <form method="post" action="/chemicals/purchase">
 
-        <div class="section-label">1 — Material Details</div>
+        <div class="section-label">1 — Identify the Chemical</div>
 
         <div class="field">
-          <label>Material Name <span class="req">*</span></label>
+          <label>Chemical / Material Name <span class="req">*</span></label>
           <input type="text" name="material_name" value="{{ prefill.material_name }}"
                  placeholder="e.g. Titanium Carbide MXene" required/>
         </div>
@@ -115,29 +137,61 @@
           </div>
         </div>
 
-        <div class="field">
-          <label>Specifications</label>
-          <textarea name="specifications" placeholder="Grade, purity, particle size, supplier preference, packaging…">{{ prefill.get('specifications','') }}</textarea>
-        </div>
-
-        <div class="section-label">2 — Quantity</div>
-
         <div class="form-row">
           <div class="field">
-            <label>Amount <span class="req">*</span></label>
+            <label>Physical Form / Type <span class="req">*</span></label>
+            <select name="physical_form" required>
+              <option value="" {% if not prefill.get('physical_form') %}selected{% endif %} disabled>Choose…</option>
+              {% for opt in ['Powder / crystalline solid','Liquid','Solution','Gas','Suspension / slurry','Not sure'] %}
+              <option value="{{ opt }}" {% if prefill.get('physical_form')==opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Grade / Purity</label>
+            <input type="text" name="grade_purity" value="{{ prefill.get('grade_purity','') }}"
+                   placeholder="e.g. ≥99%, ACS, analytical grade"/>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Other Specifications</label>
+          <textarea name="specifications" placeholder="Particle size, concentration, packaging, hazard/storage notes…">{{ prefill.get('specifications','') }}</textarea>
+        </div>
+
+        <div class="section-label">2 — Amount &amp; Supplier</div>
+
+        <div class="form-row-3">
+          <div class="field">
+            <label>Amount / Weight Needed <span class="req">*</span></label>
             <input type="text" name="amount" value="{{ prefill.get('amount','') }}"
                    placeholder="e.g. 100" required/>
           </div>
           <div class="field">
             <label>Unit <span class="req">*</span></label>
             <select name="unit">
-              <option value="g">g</option>
-              <option value="mg">mg</option>
-              <option value="kg">kg</option>
-              <option value="mL">mL</option>
-              <option value="L">L</option>
-              <option value="other">other</option>
+              {% for u in ['g','mg','kg','mL','L','mol','pieces','other'] %}
+              <option value="{{ u }}" {% if prefill.get('unit')==u %}selected{% endif %}>{{ u }}</option>
+              {% endfor %}
             </select>
+          </div>
+          <div class="field">
+            <label>Quantity (units)</label>
+            <input type="text" name="pack_count" value="{{ prefill.get('pack_count','') }}"
+                   placeholder="e.g. 1 bottle"/>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Preferred Supplier</label>
+            <input type="text" name="preferred_supplier" value="{{ prefill.get('preferred_supplier','') }}"
+                   placeholder="e.g. Sigma-Aldrich, Merck"/>
+          </div>
+          <div class="field">
+            <label>Catalogue / Product No.</label>
+            <input type="text" name="catalogue_no" value="{{ prefill.get('catalogue_no','') }}"
+                   placeholder="e.g. 294837"/>
           </div>
         </div>
 
@@ -164,6 +218,12 @@
         </div>
 
         <div class="field">
+          <label>Intended Use / Purpose</label>
+          <textarea name="purpose"
+                    placeholder="What will the chemical be used for? (experiment, project, synthesis…)">{{ prefill.get('purpose','') }}</textarea>
+        </div>
+
+        <div class="field">
           <label>Additional Comments</label>
           <textarea name="comments"
                     placeholder="Budget code, urgency, preferred vendor link, delivery notes…">{{ prefill.get('comments','') }}</textarea>
@@ -172,7 +232,8 @@
         <button type="submit" class="btn-submit-big">Submit Purchase Request</button>
 
         <p style="font-size:.8rem;color:var(--muted);text-align:center;margin-top:.8rem;">
-          The lab admin and relevant contacts will be notified by email.
+          {{ chem_manager_name }} ({{ chem_manager_email }}) will be notified by email,
+          and you'll receive a confirmation copy.
         </p>
       </form>
     </div>

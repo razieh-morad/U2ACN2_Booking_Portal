@@ -152,14 +152,28 @@
     .flash { padding:.8rem 1.2rem; border-radius:8px; margin-bottom:1rem; font-size:.9rem; }
     .flash.success { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
     .flash.error   { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a; }
+
+    /* ── Chemical manager contact banner ── */
+    .manager-banner {
+      display:flex; align-items:center; gap:.9rem; flex-wrap:wrap;
+      background:var(--card-bg); border:1px solid var(--border);
+      border-left:4px solid var(--accent); border-radius:10px;
+      padding:.85rem 1.1rem; margin-bottom:1.4rem;
+    }
+    .manager-banner .mgr-icon { font-size:1.5rem; line-height:1; }
+    .manager-banner .mgr-text { font-size:.9rem; color:var(--muted); }
+    .manager-banner .mgr-text strong { color:var(--text); }
+    .manager-banner a { color:var(--accent); font-weight:600; text-decoration:none; }
+    .manager-banner a:hover { text-decoration:underline; }
+    .request-note { font-size:.78rem; color:var(--muted); margin:.1rem 0 .6rem; }
   </style>
 </head>
 <body>
 <header class="topbar">
   <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
     <div>
-      <h1 style="font-size:1.3rem;margin:0;">🧪 Chemical Inventory</h1>
-      <p class="sub" style="margin:0;">U2ACN2 Nanolab — search, request, or purchase chemicals</p>
+      <h1 style="font-size:1.3rem;margin:0;color:#fff;">🧪 Chemical Inventory</h1>
+      <p class="sub" style="margin:0;color:rgba(255,255,255,.75);">U2ACN2 Nanolab — search, request, or purchase chemicals</p>
     </div>
     <nav style="display:flex;gap:1rem;align-items:center;">
       <a href="/" style="color:rgba(255,255,255,.8);text-decoration:none;font-size:.9rem;">← Home</a>
@@ -176,6 +190,16 @@
       <div class="flash {{ category }}">{{ message }}</div>
     {% endfor %}
   {% endwith %}
+
+  <!-- Chemical manager contact -->
+  <div class="manager-banner">
+    <span class="mgr-icon">👩‍🔬</span>
+    <span class="mgr-text">
+      Chemical inventory manager: <strong>{{ chem_manager_name }}</strong> —
+      all chemical and purchase requests are sent to
+      <a href="mailto:{{ chem_manager_email }}">{{ chem_manager_email }}</a>.
+    </span>
+  </div>
 
   <!-- Search bar -->
   <form method="get" action="/chemicals" class="search-bar">
@@ -267,6 +291,7 @@
       </button>
 
       <div class="request-form-panel" id="req-{{ c.id }}">
+        <p class="request-note">Sent to {{ chem_manager_name }} ({{ chem_manager_email }}) for approval.</p>
         <form method="post" action="/chemicals/request">
           <input type="hidden" name="chem_id" value="{{ c.id }}"/>
           <div class="form-row">
@@ -301,9 +326,10 @@
   <!-- Purchase CTA -->
   <div class="purchase-cta">
     <h3>🔬 Chemical not in inventory?</h3>
-    <p>Submit a purchase request and the lab admin will arrange procurement.</p>
+    <p>Fill in the request form with the chemical type, grade and amount needed.
+       {{ chem_manager_name }} will receive it and arrange procurement.</p>
     <a href="/chemicals/purchase{% if query %}?material_name={{ query | urlencode }}{% endif %}"
-       class="btn-purchase">Request to Purchase</a>
+       class="btn-purchase">Request a New Chemical</a>
   </div>
 
 </main>

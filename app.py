@@ -156,14 +156,32 @@ LAB_ADMIN_INFO: Dict[str, Dict[str, Any]] = {
 }
 
 # ------------------------------------------------ Chemical inventory admin --
-CHEM_ADMIN_EMAIL    = os.environ.get("CHEM_ADMIN_EMAIL", "").strip()
+# Chemical inventory manager — receives all chemical & purchase requests and is
+# shown as the contact person on the inventory pages. The `or` fallbacks mean an
+# unset OR empty env var (e.g. the blank defaults in render.yaml) still routes to
+# the manager rather than silently sending requests nowhere.
+CHEM_MANAGER_NAME  = os.environ.get("CHEM_MANAGER_NAME",  "").strip() or "Dr. Kgotla Masibi"
+CHEM_MANAGER_EMAIL = os.environ.get("CHEM_MANAGER_EMAIL", "").strip() or "masibikk@gmail.com"
+
+# Requests are routed to the manager's inbox by default (override with CHEM_ADMIN_EMAIL).
+CHEM_ADMIN_EMAIL    = os.environ.get("CHEM_ADMIN_EMAIL", "").strip() or CHEM_MANAGER_EMAIL
 CHEM_ADMIN_PASSWORD = os.environ.get("CHEM_ADMIN_PASSWORD", "admin123").strip()
 
 # Purchase request notification recipients (comma-separated emails)
 PURCHASE_NOTIFY_EMAILS = [
-    e.strip() for e in os.environ.get("PURCHASE_NOTIFY_EMAILS", CHEM_ADMIN_EMAIL).split(",")
+    e.strip()
+    for e in (os.environ.get("PURCHASE_NOTIFY_EMAILS", "").strip() or CHEM_ADMIN_EMAIL).split(",")
     if e.strip()
 ]
+
+
+@app.context_processor
+def inject_chem_manager():
+    """Make the chemical manager contact available to every template."""
+    return {
+        "chem_manager_name":  CHEM_MANAGER_NAME,
+        "chem_manager_email": CHEM_MANAGER_EMAIL,
+    }
 
 # --------------------------------------------------------- EMAIL config ----
 # Uses Resend HTTP API — works on Render free tier (SMTP ports are blocked).
@@ -431,7 +449,8 @@ def init_db():
         conn.commit()
         conn.close()
     _db_initialized = True
-    # Chemicals are managed via CSV upload — no seed needed
+    # Populate the inventory from the bundled seed CSV on a fresh database.
+    _seed_chemicals_if_empty()
 
 # ================================================ Chemical DB helpers =======
 
@@ -801,6 +820,33 @@ def _import_chemicals_from_csv(file_stream) -> Tuple[int, List[str]]:
         errors.append(f"File parse error: {e}")
     return imported, errors
 
+
+CHEMICALS_SEED_CSV = os.path.join(APP_DIR, "chemicals_seed.csv")
+
+
+def _seed_chemicals_if_empty() -> None:
+    """On a fresh database, populate the inventory from the bundled seed CSV.
+
+    Runs only when the chemicals table is empty, so admin edits and CSV
+    uploads are never overwritten. Failures are logged, never fatal.
+    """
+    if not os.path.exists(CHEMICALS_SEED_CSV):
+        return
+    try:
+        if _get_chemicals_all():
+            return  # already populated — leave it alone
+    except Exception:
+        return
+    try:
+        with open(CHEMICALS_SEED_CSV, "rb") as f:
+            imported, errors = _import_chemicals_from_csv(f)
+        import sys
+        print(f"[SEED] Imported {imported} chemicals from chemicals_seed.csv"
+              + (f" ({len(errors)} issues)" if errors else ""), file=sys.stderr)
+    except Exception as e:
+        import sys
+        print(f"[SEED ERROR] {e}", file=sys.stderr)
+
 # ============================================================ EMAIL =========
 
 def _send_email(to: str, subject: str, body: str) -> None:
@@ -891,14 +937,20 @@ def notify_chem_purchase_request(pr: Dict) -> None:
     if not smtp_ready() or not PURCHASE_NOTIFY_EMAILS:
         return
     body = (
-        f"New chemical purchase request submitted.\n\n"
-        f"  Material      : {pr['material_name']}\n"
-        f"  Formula       : {pr.get('formula','—')}\n"
-        f"  CAS No.       : {pr.get('cas_number','—')}\n"
-        f"  Specifications: {pr.get('specifications','—')}\n"
-        f"  Amount        : {pr['amount']} {pr['unit']}\n"
-        f"  Requester     : {pr['requester_first_name']} {pr['requester_surname']} ({pr['requester_email']})\n"
-        f"  Comments      : {pr.get('comments','—')}\n\n"
+        f"New chemical purchase / request submitted.\n\n"
+        f"  Chemical        : {pr['material_name']}\n"
+        f"  Formula         : {pr.get('formula') or '—'}\n"
+        f"  CAS No.         : {pr.get('cas_number') or '—'}\n"
+        f"  Physical form   : {pr.get('physical_form') or '—'}\n"
+        f"  Grade / purity  : {pr.get('grade_purity') or '—'}\n"
+        f"  Amount / weight : {pr['amount']} {pr['unit']}"
+        + (f"  ({pr.get('pack_count')})" if pr.get('pack_count') else "") + "\n"
+        f"  Pref. supplier  : {pr.get('preferred_supplier') or '—'}\n"
+        f"  Catalogue no.   : {pr.get('catalogue_no') or '—'}\n"
+        f"  Other specs     : {pr.get('free_specs', pr.get('specifications')) or '—'}\n"
+        f"  Intended use    : {pr.get('purpose') or '—'}\n"
+        f"  Requester       : {pr['requester_first_name']} {pr['requester_surname']} ({pr['requester_email']})\n"
+        f"  Comments        : {pr.get('free_comments', pr.get('comments')) or '—'}\n\n"
         f"Please review in the admin panel.\n\nRegards,\n{SMTP_FROM_NAME}\n"
     )
     _send_async_multi(
@@ -1639,28 +1691,62 @@ def purchase_request():
     if request.method == "GET":
         prefill = {k: (request.args.get(k) or "") for k in ("material_name","formula","cas_number")}
         return render_template("purchase_request.html", prefill=prefill)
+    # Individual detail inputs (help the manager determine the exact chemical)
+    physical_form      = (request.form.get("physical_form") or "").strip()
+    grade_purity       = (request.form.get("grade_purity") or "").strip()
+    pack_count         = (request.form.get("pack_count") or "").strip()
+    preferred_supplier = (request.form.get("preferred_supplier") or "").strip()
+    catalogue_no       = (request.form.get("catalogue_no") or "").strip()
+    purpose            = (request.form.get("purpose") or "").strip()
+    free_specs         = (request.form.get("specifications") or "").strip()
+    free_comments      = (request.form.get("comments") or "").strip()
+
+    # Fold the structured detail into the stored text columns (no DB schema change)
+    spec_parts = []
+    if physical_form:      spec_parts.append(f"Physical form: {physical_form}")
+    if grade_purity:       spec_parts.append(f"Grade/Purity: {grade_purity}")
+    if pack_count:         spec_parts.append(f"Quantity (units): {pack_count}")
+    if preferred_supplier: spec_parts.append(f"Preferred supplier: {preferred_supplier}")
+    if catalogue_no:       spec_parts.append(f"Catalogue no.: {catalogue_no}")
+    if free_specs:         spec_parts.append(free_specs)
+
+    comment_parts = []
+    if purpose:       comment_parts.append(f"Intended use: {purpose}")
+    if free_comments: comment_parts.append(free_comments)
+
     data = {
         "material_name":        (request.form.get("material_name") or "").strip(),
         "formula":              (request.form.get("formula") or "").strip(),
         "cas_number":           (request.form.get("cas_number") or "").strip(),
-        "specifications":       (request.form.get("specifications") or "").strip(),
+        "specifications":       "\n".join(spec_parts),
         "amount":               (request.form.get("amount") or "").strip(),
         "unit":                 (request.form.get("unit") or "g").strip(),
         "requester_first_name": (request.form.get("requester_first_name") or "").strip(),
         "requester_surname":    (request.form.get("requester_surname") or "").strip(),
         "requester_email":      (request.form.get("requester_email") or "").strip(),
-        "comments":             (request.form.get("comments") or "").strip(),
+        "comments":             "\n".join(comment_parts),
+        # extra keys — used for the email & form re-prefill; ignored on DB insert
+        "physical_form":      physical_form,
+        "grade_purity":       grade_purity,
+        "pack_count":         pack_count,
+        "preferred_supplier": preferred_supplier,
+        "catalogue_no":       catalogue_no,
+        "purpose":            purpose,
+        "free_specs":         free_specs,
+        "free_comments":      free_comments,
     }
     errors = []
-    if not data["material_name"]:        errors.append("Material name is required.")
-    if not data["amount"]:               errors.append("Amount is required.")
+    if not data["material_name"]:        errors.append("Chemical / material name is required.")
+    if not data["amount"]:               errors.append("Amount / weight is required.")
     if not data["requester_first_name"]: errors.append("First name is required.")
     if not data["requester_surname"]:    errors.append("Surname is required.")
     if not data["requester_email"] or "@" not in data["requester_email"]:
         errors.append("Valid email is required.")
     if errors:
         flash(" ".join(errors), "error")
-        return render_template("purchase_request.html", prefill=data, errors=errors)
+        # show the raw free-text back in its own boxes, keep the structured fields
+        prefill = {**data, "specifications": free_specs, "comments": free_comments}
+        return render_template("purchase_request.html", prefill=prefill, errors=errors)
     _add_purchase_request(data)
     notify_chem_purchase_request(data)
     notify_user_purchase_received(data)
